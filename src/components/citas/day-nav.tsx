@@ -28,8 +28,8 @@ export function DayNav({
   return (
     <>
       <div className="flex items-center justify-between">
-        <button onClick={() => go(-1)} className="w-9 h-9 rounded-full border border-border flex items-center justify-center">
-          <ChevronLeft size={18} />
+        <button onClick={() => go(-1)} className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center shrink-0">
+          <ChevronLeft size={20} />
         </button>
         <button onClick={() => setPickerOpen(true)} className="text-center active:opacity-70">
           <p className="text-xs font-semibold text-brand">{isToday ? "Hoy" : "Ver calendario"}</p>
@@ -37,8 +37,8 @@ export function DayNav({
             {format(current, "EEEE, d 'de' MMMM", { locale: es })}
           </p>
         </button>
-        <button onClick={() => go(1)} className="w-9 h-9 rounded-full border border-border flex items-center justify-center">
-          <ChevronRight size={18} />
+        <button onClick={() => go(1)} className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center shrink-0">
+          <ChevronRight size={20} />
         </button>
       </div>
 

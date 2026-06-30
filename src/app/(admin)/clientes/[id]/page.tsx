@@ -47,11 +47,11 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   return (
     <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
       <header className="flex items-center justify-between">
-        <Link href="/clientes" className="w-9 h-9 rounded-full border border-border flex items-center justify-center">
-          <ChevronLeft size={18} />
+        <Link href="/clientes" className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">
+          <ChevronLeft size={20} />
         </Link>
-        <Link href={`/clientes/${id}/editar`} className="w-9 h-9 rounded-full border border-border flex items-center justify-center">
-          <Pencil size={16} />
+        <Link href={`/clientes/${id}/editar`} className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">
+          <Pencil size={18} />
         </Link>
       </header>
 
