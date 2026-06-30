@@ -2,11 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions/auth";
 import { Avatar } from "@/components/ui/avatar";
 import Link from "next/link";
-import { Package, Scissors, Bell, LogOut, ChevronRight, ShieldCheck } from "lucide-react";
+import { Package, Scissors, Bell, LogOut, ChevronRight, ShieldCheck, CalendarClock } from "lucide-react";
 
 const menu = [
   { href: "/productos", label: "Productos e inventario", icon: Package },
   { href: "/servicios", label: "Servicios", icon: Scissors },
+  { href: "/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
   { href: "/notificaciones", label: "Notificaciones", icon: Bell },
 ];
 

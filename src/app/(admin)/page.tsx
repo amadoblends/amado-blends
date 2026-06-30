@@ -195,8 +195,8 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-4 gap-2">
           <QuickAction href="/citas/nueva" label="Nueva cita" icon={Calendar} color="text-brand" bg="bg-brand-light" />
           <QuickAction href="/clientes/nuevo" label="Nuevo cliente" icon={Users} color="text-violet" bg="bg-violet-light" />
-          <QuickAction href="/servicios/nuevo" label="Nuevo servicio" icon={Clock} color="text-success" bg="bg-success-light" />
-          <QuickAction href="/productos/nuevo" label="Nuevo producto" icon={DollarSign} color="text-info" bg="bg-info-light" />
+          <QuickAction href="/servicios" label="Nuevo servicio" icon={Clock} color="text-success" bg="bg-success-light" />
+          <QuickAction href="/productos" label="Nuevo producto" icon={DollarSign} color="text-info" bg="bg-info-light" />
         </div>
       </section>
     </div>

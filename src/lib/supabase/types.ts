@@ -2,6 +2,7 @@ export type AppointmentStatus = "confirmada" | "pendiente" | "completada" | "can
 export type ClientSegment = "frecuente" | "nuevo" | "inactivo" | "regular";
 export type NoteType = "preferencias" | "productos" | "estilo" | "otros";
 export type StockLevel = "ok" | "bajo" | "critico";
+export type ServiceKind = "single" | "package";
 
 export interface Database {
   public: {

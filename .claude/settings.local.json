@@ -8,7 +8,13 @@
       "Bash(npm install *)",
       "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies.next\\)\")",
       "Bash(npm uninstall *)",
-      "Read(//c/c/Users/Angel/OneDrive/Desktop/mi proyecto de barbaria/**)"
+      "Read(//c/c/Users/Angel/OneDrive/Desktop/mi proyecto de barbaria/**)",
+      "Bash(gh auth *)",
+      "Bash(npx --yes supabase --version)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(cd \"/c/Users/Angel/OneDrive/Desktop/mi proyecto de barbaria\" && rm -rf \"src/app/\\(admin\\)/productos/nuevo\" \"src/app/\\(admin\\)/productos/[id]\" && find \"src/app/\\(admin\\)/productos\" -type f)",
+      "Bash(cd \"/c/Users/Angel/OneDrive/Desktop/mi proyecto de barbaria\" && rm -rf \"src/app/\\(admin\\)/servicios/nuevo\" \"src/app/\\(admin\\)/servicios/[id]\" \"src/components/servicios/service-form.tsx\" && find \"src/app/\\(admin\\)/servicios\" -type f)"
     ]
   }
 }

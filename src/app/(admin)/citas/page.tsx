@@ -2,6 +2,7 @@ import { format, startOfWeek, addDays } from "date-fns";
 import { Bell } from "lucide-react";
 import Link from "next/link";
 import { getAppointmentsForDay, getAppointmentCountsByDay } from "@/lib/data/appointments";
+import { getAvailability, getBookingSettings } from "@/lib/data/availability";
 import { DateStrip } from "@/components/citas/date-strip";
 import { DayNav } from "@/components/citas/day-nav";
 import { Avatar } from "@/components/ui/avatar";
@@ -20,12 +21,15 @@ export default async function CitasPage({
   const weekStart = startOfWeek(date, { weekStartsOn: 1 });
   const weekEnd = addDays(weekStart, 5);
 
-  const [appointments, countsMap] = await Promise.all([
+  const [appointments, countsMap, availability, bookingSettings] = await Promise.all([
     getAppointmentsForDay(date),
     getAppointmentCountsByDay(weekStart, weekEnd),
+    getAvailability(),
+    getBookingSettings(),
   ]);
 
   const counts = Object.fromEntries(countsMap.entries());
+  const activeWeekdays = availability.filter((d) => d.is_active).map((d) => d.weekday);
 
   return (
     <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-4">
@@ -40,7 +44,7 @@ export default async function CitasPage({
       </header>
 
       <DateStrip selected={dateStr} counts={counts} />
-      <DayNav date={dateStr} />
+      <DayNav date={dateStr} activeWeekdays={activeWeekdays} bookingWindowDays={bookingSettings.booking_window_days} />
 
       <div className="bg-surface rounded-2xl border border-border divide-y divide-border overflow-hidden">
         {appointments.length === 0 ? (
