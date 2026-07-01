@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 export interface AvailabilityDay {
@@ -16,19 +17,27 @@ export interface BookingSettings {
   min_notice_minutes: number;
 }
 
-export async function getAvailability(): Promise<AvailabilityDay[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from("availability").select("*").order("weekday");
-  if (error || !data) return [];
-  return data;
-}
+export const getAvailability = unstable_cache(
+  async (): Promise<AvailabilityDay[]> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase.from("availability").select("*").order("weekday");
+    if (error || !data) return [];
+    return data;
+  },
+  ["availability"],
+  { tags: ["availability"], revalidate: 60 }
+);
 
-export async function getBookingSettings(): Promise<BookingSettings> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("booking_settings")
-    .select("booking_window_days, min_notice_minutes")
-    .eq("id", 1)
-    .single();
-  return data ?? { booking_window_days: 30, min_notice_minutes: 60 };
-}
+export const getBookingSettings = unstable_cache(
+  async (): Promise<BookingSettings> => {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("booking_settings")
+      .select("booking_window_days, min_notice_minutes")
+      .eq("id", 1)
+      .single();
+    return data ?? { booking_window_days: 30, min_notice_minutes: 60 };
+  },
+  ["booking_settings"],
+  { tags: ["booking_settings"], revalidate: 60 }
+);
