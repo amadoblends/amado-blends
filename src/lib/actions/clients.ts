@@ -98,6 +98,23 @@ export async function deleteClientRecord(clientId: string): Promise<ActionResult
   return { ok: true };
 }
 
+export async function searchClients(
+  query: string
+): Promise<{ id: string; full_name: string; phone: string; email: string | null }[]> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const { data } = await supabase
+    .from("clients")
+    .select("id, full_name, phone, email")
+    .or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,email.ilike.%${q}%`)
+    .order("full_name")
+    .limit(10);
+  return data ?? [];
+}
+
 const noteSchema = z.object({
   clientId: z.string().uuid(),
   type: z.enum(["preferencias", "productos", "estilo", "otros"]),

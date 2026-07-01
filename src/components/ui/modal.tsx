@@ -11,12 +11,14 @@ export function Modal({
   title,
   children,
   maxWidthClass = "max-w-[420px]",
+  headerLeft,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   maxWidthClass?: string;
+  headerLeft?: React.ReactNode;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -38,8 +40,11 @@ export function Modal({
         )}
       >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-foreground">{title}</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-background flex items-center justify-center">
+          <div className="flex items-center gap-2 min-w-0">
+            {headerLeft}
+            <h2 className="font-bold text-foreground truncate">{title}</h2>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-background flex items-center justify-center shrink-0">
             <X size={16} />
           </button>
         </div>

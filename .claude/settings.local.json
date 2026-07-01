@@ -14,7 +14,12 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/login)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
       "Bash(cd \"/c/Users/Angel/OneDrive/Desktop/mi proyecto de barbaria\" && rm -rf \"src/app/\\(admin\\)/productos/nuevo\" \"src/app/\\(admin\\)/productos/[id]\" && find \"src/app/\\(admin\\)/productos\" -type f)",
-      "Bash(cd \"/c/Users/Angel/OneDrive/Desktop/mi proyecto de barbaria\" && rm -rf \"src/app/\\(admin\\)/servicios/nuevo\" \"src/app/\\(admin\\)/servicios/[id]\" \"src/components/servicios/service-form.tsx\" && find \"src/app/\\(admin\\)/servicios\" -type f)"
+      "Bash(cd \"/c/Users/Angel/OneDrive/Desktop/mi proyecto de barbaria\" && rm -rf \"src/app/\\(admin\\)/servicios/nuevo\" \"src/app/\\(admin\\)/servicios/[id]\" \"src/components/servicios/service-form.tsx\" && find \"src/app/\\(admin\\)/servicios\" -type f)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)"
     ]
   }
 }
