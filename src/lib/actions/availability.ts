@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/actions/appointments";
 
 const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -35,7 +35,7 @@ export async function toggleAvailabilityDay(weekday: number, isActive: boolean):
 
   if (error) return { ok: false, error: "No se pudo actualizar el día." };
 
-  revalidateTag("availability", "max");
+
   revalidatePath("/disponibilidad");
   revalidatePath("/citas");
   return { ok: true };
@@ -75,7 +75,7 @@ export async function updateAvailabilityDay(formData: FormData): Promise<ActionR
 
   if (error) return { ok: false, error: "No se pudo guardar el horario." };
 
-  revalidateTag("availability", "max");
+
   revalidatePath("/disponibilidad");
   revalidatePath("/citas");
   return { ok: true };
@@ -107,7 +107,7 @@ export async function updateBookingSettings(formData: FormData): Promise<ActionR
 
   if (error) return { ok: false, error: "No se pudo guardar la configuración." };
 
-  revalidateTag("booking_settings", "max");
+
   revalidatePath("/disponibilidad");
   revalidatePath("/citas");
   return { ok: true };
