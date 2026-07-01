@@ -44,7 +44,7 @@ export async function upsertProduct(productId: string | null, formData: FormData
     : supabase.from("products").insert(payload);
 
   const { error } = await query;
-  if (error) return { ok: false, error: "No se pudo guardar el producto." };
+  if (error) return { ok: false, error: `No se pudo guardar el producto: ${error.message}` };
 
   revalidatePath("/productos");
   revalidatePath("/");
@@ -113,10 +113,10 @@ export async function upsertService(serviceId: string | null, formData: FormData
   let id = serviceId;
   if (id) {
     const { error } = await supabase.from("services").update(payload).eq("id", id);
-    if (error) return { ok: false, error: "No se pudo guardar el servicio." };
+    if (error) return { ok: false, error: `No se pudo guardar el servicio: ${error.message}` };
   } else {
     const { data, error } = await supabase.from("services").insert(payload).select("id").single();
-    if (error || !data) return { ok: false, error: "No se pudo guardar el servicio." };
+    if (error || !data) return { ok: false, error: `No se pudo guardar el servicio: ${error?.message}` };
     id = data.id;
   }
 

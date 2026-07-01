@@ -45,7 +45,7 @@ export function ImageUploader({
     });
 
     if (uploadError) {
-      setError("No se pudo subir la imagen. Verifica que el bucket 'media' exista.");
+      setError(`Error al subir: ${uploadError.message}`);
       setUploading(false);
       return;
     }
