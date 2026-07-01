@@ -14,6 +14,7 @@ export interface AvailabilityDay {
 export interface BookingSettings {
   booking_window_days: number;
   min_notice_minutes: number;
+  buffer_minutes: number;
 }
 
 export async function getAvailability(): Promise<AvailabilityDay[]> {
@@ -27,8 +28,8 @@ export async function getBookingSettings(): Promise<BookingSettings> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("booking_settings")
-    .select("booking_window_days, min_notice_minutes")
+    .select("booking_window_days, min_notice_minutes, buffer_minutes")
     .eq("id", 1)
     .single();
-  return data ?? { booking_window_days: 30, min_notice_minutes: 60 };
+  return data ?? { booking_window_days: 30, min_notice_minutes: 60, buffer_minutes: 0 };
 }

@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { getAvailability, getBookingSettings } from "@/lib/data/availability";
+import { ChevronLeft, ChevronRight, Settings2 } from "lucide-react";
+import { getAvailability } from "@/lib/data/availability";
 import { DayToggle } from "@/components/disponibilidad/day-toggle";
-import { BookingSettingsForm } from "@/components/disponibilidad/booking-settings-form";
 
 const weekdayLabels = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 const displayOrder = [1, 2, 3, 4, 5, 6, 0];
@@ -15,50 +14,79 @@ function formatHour(value: string) {
 }
 
 export default async function AvailabilityPage() {
-  const [days, settings] = await Promise.all([getAvailability(), getBookingSettings()]);
+  const days = await getAvailability();
   const byWeekday = new Map(days.map((d) => [d.weekday, d]));
 
   return (
     <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
       <header className="flex items-center gap-3">
-        <Link href="/mas" className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">
+        <Link
+          href="/mas"
+          className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center shrink-0"
+        >
           <ChevronLeft size={20} />
         </Link>
-        <h1 className="text-xl font-bold text-foreground">Disponibilidad</h1>
+        <h1 className="text-xl font-bold text-foreground flex-1">Disponibilidad</h1>
+        <Link
+          href="/disponibilidad/configuracion"
+          className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center shrink-0"
+          title="Configuración de reservas"
+        >
+          <Settings2 size={18} className="text-foreground" />
+        </Link>
       </header>
 
-      <div>
-        <p className="text-xs font-semibold text-muted mb-2 px-1">Días de la semana</p>
-        <div className="bg-surface rounded-2xl border border-border divide-y divide-border overflow-hidden">
-          {displayOrder.map((weekday) => {
-            const day = byWeekday.get(weekday);
-            return (
+      <p className="text-sm text-muted">
+        Activa los días que trabajas y toca el nombre del día para configurar el horario.
+      </p>
+
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+        {displayOrder.map((weekday, idx) => {
+          const day = byWeekday.get(weekday);
+          const isLast = idx === displayOrder.length - 1;
+          return (
+            <div
+              key={weekday}
+              className={`flex items-center gap-3 px-4 py-4 ${!isLast ? "border-b border-border" : ""}`}
+            >
+              {/* Toggle — NOT inside the link so it's independently tappable */}
+              <DayToggle weekday={weekday} isActive={day?.is_active ?? false} />
+
+              {/* Link area — tap to open day settings */}
               <Link
-                key={weekday}
                 href={`/disponibilidad/${weekday}`}
-                className="flex items-center justify-between gap-3 px-4 py-3 active:bg-background"
+                className="flex-1 flex items-center justify-between min-w-0 active:opacity-70"
               >
-                <p className="text-sm font-semibold text-foreground">{weekdayLabels[weekday]}</p>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted">
-                    {day?.is_active ? `${formatHour(day.start_time)} - ${formatHour(day.end_time)}` : "No laboral"}
-                  </span>
-                  <DayToggle weekday={weekday} isActive={day?.is_active ?? false} />
-                  <ChevronRight size={16} className="text-muted" />
+                <div className="min-w-0">
+                  <p className="text-base font-semibold text-foreground">{weekdayLabels[weekday]}</p>
+                  <p className="text-sm text-muted mt-0.5">
+                    {day?.is_active
+                      ? `${formatHour(day.start_time)} – ${formatHour(day.end_time)}${
+                          day.slot_minutes ? ` · ${day.slot_minutes} min/turno` : ""
+                        }`
+                      : "No laboral"}
+                  </p>
                 </div>
+                <ChevronRight size={18} className="text-muted shrink-0 ml-2" />
               </Link>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
 
-      <div>
-        <p className="text-xs font-semibold text-muted mb-2 px-1">Configuración de reservas</p>
-        <BookingSettingsForm
-          bookingWindowDays={settings.booking_window_days}
-          minNoticeMinutes={settings.min_notice_minutes}
-        />
-      </div>
+      <Link
+        href="/disponibilidad/configuracion"
+        className="flex items-center gap-3 bg-surface rounded-2xl border border-border px-4 py-4 active:bg-background"
+      >
+        <div className="w-9 h-9 rounded-xl bg-brand-light flex items-center justify-center shrink-0">
+          <Settings2 size={18} className="text-brand" />
+        </div>
+        <div className="flex-1">
+          <p className="text-base font-semibold text-foreground">Configuración de reservas</p>
+          <p className="text-sm text-muted">Ventana, antelación, buffer entre citas</p>
+        </div>
+        <ChevronRight size={18} className="text-muted" />
+      </Link>
     </div>
   );
 }

@@ -84,6 +84,7 @@ export async function updateAvailabilityDay(formData: FormData): Promise<ActionR
 const settingsSchema = z.object({
   bookingWindowDays: z.coerce.number().int().min(1).max(365),
   minNoticeMinutes: z.coerce.number().int().min(0).max(10080),
+  bufferMinutes: z.coerce.number().int().min(0).max(120),
 });
 
 export async function updateBookingSettings(formData: FormData): Promise<ActionResult> {
@@ -94,6 +95,7 @@ export async function updateBookingSettings(formData: FormData): Promise<ActionR
   const parsed = settingsSchema.safeParse({
     bookingWindowDays: formData.get("bookingWindowDays"),
     minNoticeMinutes: formData.get("minNoticeMinutes"),
+    bufferMinutes: formData.get("bufferMinutes") ?? "0",
   });
   if (!parsed.success) return { ok: false, error: "Datos inválidos." };
 
@@ -102,6 +104,7 @@ export async function updateBookingSettings(formData: FormData): Promise<ActionR
     .update({
       booking_window_days: parsed.data.bookingWindowDays,
       min_notice_minutes: parsed.data.minNoticeMinutes,
+      buffer_minutes: parsed.data.bufferMinutes,
     })
     .eq("id", 1);
 
