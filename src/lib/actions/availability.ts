@@ -35,7 +35,7 @@ export async function toggleAvailabilityDay(weekday: number, isActive: boolean):
 
   if (error) return { ok: false, error: "No se pudo actualizar el día." };
 
-  revalidateTag("availability");
+  revalidateTag("availability", "max");
   revalidatePath("/disponibilidad");
   revalidatePath("/citas");
   return { ok: true };
@@ -75,7 +75,7 @@ export async function updateAvailabilityDay(formData: FormData): Promise<ActionR
 
   if (error) return { ok: false, error: "No se pudo guardar el horario." };
 
-  revalidateTag("availability");
+  revalidateTag("availability", "max");
   revalidatePath("/disponibilidad");
   revalidatePath("/citas");
   return { ok: true };
@@ -107,7 +107,7 @@ export async function updateBookingSettings(formData: FormData): Promise<ActionR
 
   if (error) return { ok: false, error: "No se pudo guardar la configuración." };
 
-  revalidateTag("booking_settings");
+  revalidateTag("booking_settings", "max");
   revalidatePath("/disponibilidad");
   revalidatePath("/citas");
   return { ok: true };
