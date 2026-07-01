@@ -7,7 +7,7 @@ import { DateStrip } from "@/components/citas/date-strip";
 import { DayNav } from "@/components/citas/day-nav";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { Fab } from "@/components/ui/fab";
 
 export default async function CitasPage({
   searchParams,
@@ -73,6 +73,8 @@ export default async function CitasPage({
           ))
         )}
       </div>
+
+      <Fab href={`/citas/nueva?date=${dateStr}`} label="Nueva cita" />
     </div>
   );
 }

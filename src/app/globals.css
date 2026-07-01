@@ -84,20 +84,12 @@ button {
   font-family: inherit;
 }
 
-/* Mobile shell: app always renders centered like a phone screen, even on desktop */
+/* App shell: single column on mobile; sidebar layout takes over on desktop (see admin layout) */
 .app-shell {
-  max-width: 480px;
-  margin: 0 auto;
   min-height: 100dvh;
+  width: 100%;
   background: var(--background);
   position: relative;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.06);
-}
-
-@media (min-width: 481px) {
-  body {
-    background: #e7e8ec;
-  }
 }
 
 .no-scrollbar::-webkit-scrollbar {

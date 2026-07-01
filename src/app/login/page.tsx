@@ -45,7 +45,7 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex-1 flex flex-col justify-center px-6 py-12">
+    <div className="flex-1 flex flex-col justify-center px-6 py-12 w-full max-w-sm mx-auto">
       <div className="flex flex-col items-center mb-10">
         <div className="w-16 h-16 rounded-2xl bg-brand flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-brand/30">
           AB

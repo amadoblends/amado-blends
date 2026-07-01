@@ -55,7 +55,7 @@ export default async function DashboardPage() {
         <p className="text-muted text-sm mt-0.5">Aquí tienes el resumen de tu negocio.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
           icon={DollarSign}
           iconBg="var(--color-brand-light)"
@@ -90,25 +90,27 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <section className="bg-surface rounded-2xl border border-border p-4">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="font-bold text-foreground">Resumen de ingresos</h2>
-          <span className="text-xs font-medium text-muted">Esta semana</span>
-        </div>
-        <p className="text-xs text-muted">Ingresos totales</p>
-        <p className="text-2xl font-bold text-foreground">{formatCurrency(data.weekRevenueTotal)}</p>
-        <RevenueChart data={data.weekRevenue} />
-      </section>
+      <div className="grid gap-6 md:grid-cols-2">
+        <section className="bg-surface rounded-2xl border border-border p-4">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="font-bold text-foreground">Resumen de ingresos</h2>
+            <span className="text-xs font-medium text-muted">Esta semana</span>
+          </div>
+          <p className="text-xs text-muted">Ingresos totales</p>
+          <p className="text-2xl font-bold text-foreground">{formatCurrency(data.weekRevenueTotal)}</p>
+          <RevenueChart data={data.weekRevenue} />
+        </section>
 
-      <section className="bg-surface rounded-2xl border border-border p-4">
-        <h2 className="font-bold text-foreground mb-2">Distribución de citas</h2>
-        <AppointmentsDonut distribution={data.appointmentDistribution} />
-        <div className="space-y-2 mt-2">
-          <LegendRow color="bg-brand" label="Confirmadas" value={data.appointmentDistribution.confirmada} total={data.appointmentDistribution.total} />
-          <LegendRow color="bg-violet" label="Pendientes" value={data.appointmentDistribution.pendiente} total={data.appointmentDistribution.total} />
-          <LegendRow color="bg-info" label="Completadas" value={data.appointmentDistribution.completada} total={data.appointmentDistribution.total} />
-        </div>
-      </section>
+        <section className="bg-surface rounded-2xl border border-border p-4">
+          <h2 className="font-bold text-foreground mb-2">Distribución de citas</h2>
+          <AppointmentsDonut distribution={data.appointmentDistribution} />
+          <div className="space-y-2 mt-2">
+            <LegendRow color="bg-brand" label="Confirmadas" value={data.appointmentDistribution.confirmada} total={data.appointmentDistribution.total} />
+            <LegendRow color="bg-violet" label="Pendientes" value={data.appointmentDistribution.pendiente} total={data.appointmentDistribution.total} />
+            <LegendRow color="bg-info" label="Completadas" value={data.appointmentDistribution.completada} total={data.appointmentDistribution.total} />
+          </div>
+        </section>
+      </div>
 
       <section className="bg-surface rounded-2xl border border-border p-4">
         <div className="flex items-center justify-between mb-3">
@@ -134,61 +136,63 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      <section className="bg-surface rounded-2xl border border-border p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-foreground">Productos más vendidos</h2>
-          <Link href="/productos" className="text-brand text-sm font-semibold">Ver todos</Link>
-        </div>
-        {data.topProducts.length === 0 ? (
-          <p className="text-sm text-muted py-4 text-center">Aún no hay ventas registradas.</p>
-        ) : (
-          <ul className="space-y-3">
-            {data.topProducts.map((p, i) => (
-              <li key={p.id} className="flex items-center gap-3">
-                <span className="text-sm font-bold text-muted w-4">{i + 1}</span>
-                <div className="w-10 h-10 rounded-lg bg-background border border-border shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
-                  <p className="text-xs text-muted">{p.unitsSold} unidades</p>
-                </div>
-                <span className="text-sm font-bold text-foreground">{formatCurrency(p.price)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <div className="grid gap-6 md:grid-cols-2">
+        <section className="bg-surface rounded-2xl border border-border p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-foreground">Productos más vendidos</h2>
+            <Link href="/productos" className="text-brand text-sm font-semibold">Ver todos</Link>
+          </div>
+          {data.topProducts.length === 0 ? (
+            <p className="text-sm text-muted py-4 text-center">Aún no hay ventas registradas.</p>
+          ) : (
+            <ul className="space-y-3">
+              {data.topProducts.map((p, i) => (
+                <li key={p.id} className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-muted w-4">{i + 1}</span>
+                  <div className="w-10 h-10 rounded-lg bg-background border border-border shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
+                    <p className="text-xs text-muted">{p.unitsSold} unidades</p>
+                  </div>
+                  <span className="text-sm font-bold text-foreground">{formatCurrency(p.price)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      <section className="bg-surface rounded-2xl border border-border p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-foreground">Alertas de inventario</h2>
-          <Link href="/productos" className="text-brand text-sm font-semibold">Ver todas</Link>
-        </div>
-        {data.inventoryAlerts.length === 0 ? (
-          <p className="text-sm text-muted py-4 text-center">Tu inventario está saludable.</p>
-        ) : (
-          <ul className="space-y-2">
-            {data.inventoryAlerts.map((p) => (
-              <li
-                key={p.id}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl p-3",
-                  p.level === "critico" ? "bg-danger-light" : "bg-warning-light"
-                )}
-              >
-                <div className="w-10 h-10 rounded-lg bg-white shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
-                  <p className={cn("text-xs font-semibold", p.level === "critico" ? "text-danger" : "text-warning")}>
-                    {p.level === "critico" ? "Stock crítico" : "Stock bajo"}
-                  </p>
-                  <p className="text-xs text-muted">Quedan {p.stock} unidades</p>
-                </div>
-                <AlertTriangle size={18} className={p.level === "critico" ? "text-danger" : "text-warning"} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        <section className="bg-surface rounded-2xl border border-border p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-foreground">Alertas de inventario</h2>
+            <Link href="/productos" className="text-brand text-sm font-semibold">Ver todas</Link>
+          </div>
+          {data.inventoryAlerts.length === 0 ? (
+            <p className="text-sm text-muted py-4 text-center">Tu inventario está saludable.</p>
+          ) : (
+            <ul className="space-y-2">
+              {data.inventoryAlerts.map((p) => (
+                <li
+                  key={p.id}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl p-3",
+                    p.level === "critico" ? "bg-danger-light" : "bg-warning-light"
+                  )}
+                >
+                  <div className="w-10 h-10 rounded-lg bg-white shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
+                    <p className={cn("text-xs font-semibold", p.level === "critico" ? "text-danger" : "text-warning")}>
+                      {p.level === "critico" ? "Stock crítico" : "Stock bajo"}
+                    </p>
+                    <p className="text-xs text-muted">Quedan {p.stock} unidades</p>
+                  </div>
+                  <AlertTriangle size={18} className={p.level === "critico" ? "text-danger" : "text-warning"} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
 
       <section>
         <h2 className="font-bold text-foreground mb-3">Acciones rápidas</h2>
