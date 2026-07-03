@@ -27,7 +27,7 @@ export function DayCitasShell({
 
   return (
     <>
-      <DayTimeline appointments={appointments} dayAvail={dayAvail} />
+      <DayTimeline appointments={appointments} dayAvail={dayAvail} dateStr={dateStr} />
 
       <AppointmentWizard
         open={wizardOpen}

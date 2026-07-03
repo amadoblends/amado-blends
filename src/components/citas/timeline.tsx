@@ -25,13 +25,24 @@ function fmtMins(mins: number) {
   return `${dh}:${String(m).padStart(2, "0")} ${p}`;
 }
 
+function localDateStr(iso: string) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function DayTimeline({
-  appointments,
+  appointments: allAppointments,
   dayAvail,
+  dateStr,
 }: {
   appointments: AppointmentRow[];
   dayAvail: AvailabilityDay | null;
+  dateStr: string;
 }) {
+  // Server fetches a widened window (UTC vs local timezone); keep only
+  // appointments that fall on the selected local day.
+  const appointments = allAppointments.filter((a) => localDateStr(a.starts_at) === dateStr);
+
   if (!dayAvail?.is_active) {
     return (
       <div className="bg-surface rounded-2xl border border-border p-8 text-center">

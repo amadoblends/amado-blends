@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import {
   addMonths,
   subMonths,
@@ -21,6 +21,7 @@ import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 import { createAppointment } from "@/lib/actions/appointments";
 import { createClientRecord, searchClients } from "@/lib/actions/clients";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import type { AvailabilityDay } from "@/lib/data/availability";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -40,16 +41,30 @@ function fmtSlot(hhmm: string) {
   const dh = h % 12 === 0 ? 12 : h % 12;
   return `${dh}:${String(m).padStart(2, "0")} ${p}`;
 }
-function generateSlots(day: AvailabilityDay, durMins: number): string[] {
+interface BusyInterval {
+  start: number; // epoch ms
+  end: number;
+}
+
+function generateSlots(
+  day: AvailabilityDay,
+  durMins: number,
+  dateStr: string,
+  busy: BusyInterval[]
+): string[] {
   if (!day.is_active) return [];
   const start = toMins(day.start_time);
   const end = toMins(day.end_time);
   const step = day.slot_minutes;
   const bS = day.break_start_time ? toMins(day.break_start_time) : null;
   const bE = day.break_end_time ? toMins(day.break_end_time) : null;
+  const [y, mo, d] = dateStr.split("-").map(Number);
   const out: string[] = [];
   for (let t = start; t + durMins <= end; t += step) {
     if (bS !== null && bE !== null && t < bE && t + durMins > bS) continue;
+    const sMs = new Date(y, mo - 1, d, Math.floor(t / 60), t % 60, 0).getTime();
+    const eMs = sMs + durMins * 60000;
+    if (busy.some((b) => sMs < b.end && eMs > b.start)) continue;
     out.push(fromMins(t));
   }
   return out;
@@ -118,6 +133,7 @@ export function AppointmentWizard({
     startOfMonth(new Date(defaultDate + "T00:00:00"))
   );
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<BusyInterval[]>([]);
   const [isPending, startTransition] = useTransition();
 
   const activeWeekdays = new Set(availability.filter((d) => d.is_active).map((d) => d.weekday));
@@ -127,9 +143,38 @@ export function AppointmentWizard({
     return availability.find((d) => d.weekday === wd && d.is_active) ?? null;
   }
 
+  // Fetch occupied times for the selected day so taken slots are hidden
+  useEffect(() => {
+    if (step !== "datetime") return;
+    let alive = true;
+    const supabase = createBrowserClient();
+    const [y, mo, d] = data.date.split("-").map(Number);
+    const dayStart = new Date(y, mo - 1, d, 0, 0, 0);
+    const dayEnd = new Date(y, mo - 1, d, 23, 59, 59);
+    supabase
+      .rpc("get_busy_times", {
+        p_start: dayStart.toISOString(),
+        p_end: dayEnd.toISOString(),
+      })
+      .then(({ data: rows }) => {
+        if (!alive) return;
+        setBusy(
+          (rows ?? []).map((b: { starts_at: string; ends_at: string }) => ({
+            start: new Date(b.starts_at).getTime(),
+            end: new Date(b.ends_at).getTime(),
+          }))
+        );
+      });
+    return () => {
+      alive = false;
+    };
+  }, [data.date, step]);
+
   const dayAvail = getDayAvail(data.date);
   const slots =
-    data.service && dayAvail ? generateSlots(dayAvail, data.service.duration_minutes) : [];
+    data.service && dayAvail
+      ? generateSlots(dayAvail, data.service.duration_minutes, data.date, busy)
+      : [];
 
   function reset() {
     setStep("type");

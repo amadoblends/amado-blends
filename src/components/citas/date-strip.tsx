@@ -5,11 +5,24 @@ import { addDays, format, isSameDay, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
-export function DateStrip({ selected, counts }: { selected: string; counts: Record<string, number> }) {
+export function DateStrip({
+  selected,
+  appointmentStarts,
+}: {
+  selected: string;
+  appointmentStarts: string[];
+}) {
   const router = useRouter();
   const selectedDate = new Date(selected + "T00:00:00");
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
   const days = Array.from({ length: 6 }, (_, i) => addDays(weekStart, i));
+
+  // Group by LOCAL date in the browser so evening appointments count on the right day
+  const counts: Record<string, number> = {};
+  for (const iso of appointmentStarts) {
+    const key = format(new Date(iso), "yyyy-MM-dd");
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
 
   return (
     <div className="grid grid-cols-6 gap-1.5">

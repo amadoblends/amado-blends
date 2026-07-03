@@ -1,7 +1,7 @@
 import { format, startOfWeek, addDays } from "date-fns";
 import { Bell } from "lucide-react";
 import Link from "next/link";
-import { getAppointmentsForDay, getAppointmentCountsByDay } from "@/lib/data/appointments";
+import { getAppointmentsForDay, getAppointmentStarts } from "@/lib/data/appointments";
 import { getAvailability, getBookingSettings } from "@/lib/data/availability";
 import { createClient } from "@/lib/supabase/server";
 import { DateStrip } from "@/components/citas/date-strip";
@@ -22,10 +22,10 @@ export default async function CitasPage({
 
   const supabase = await createClient();
 
-  const [appointments, countsMap, availability, bookingSettings, { data: servicesData }] =
+  const [appointments, appointmentStarts, availability, bookingSettings, { data: servicesData }] =
     await Promise.all([
       getAppointmentsForDay(date),
-      getAppointmentCountsByDay(weekStart, weekEnd),
+      getAppointmentStarts(weekStart, weekEnd),
       getAvailability(),
       getBookingSettings(),
       supabase
@@ -34,7 +34,6 @@ export default async function CitasPage({
         .order("name"),
     ]);
 
-  const counts = Object.fromEntries(countsMap.entries());
   const activeWeekdays = availability.filter((d) => d.is_active).map((d) => d.weekday);
 
   // Availability config for the selected day
@@ -53,7 +52,7 @@ export default async function CitasPage({
         </Link>
       </header>
 
-      <DateStrip selected={dateStr} counts={counts} />
+      <DateStrip selected={dateStr} appointmentStarts={appointmentStarts} />
       <DayNav
         date={dateStr}
         activeWeekdays={activeWeekdays}
