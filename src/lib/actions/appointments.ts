@@ -144,7 +144,7 @@ async function notifyAppointmentClient(
     .eq("id", appointmentId)
     .single();
   if (!apt?.client_id) return;
-  await supabase.from("notifications").insert({
+  await supabase.from("client_notifications").insert({
     client_id: apt.client_id,
     title,
     body,
