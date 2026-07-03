@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, Phone, MessageSquare } from "lucide-react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/server";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { AppointmentStatusActions } from "@/components/citas/status-actions";
 import { RescheduleButton } from "@/components/citas/reschedule-button";
+import { LocalLongDate, LocalTimeRange } from "@/components/ui/local-datetime";
 import { getAvailability } from "@/lib/data/availability";
 
 export default async function AppointmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -95,14 +94,43 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
         </div>
 
         <dl className="space-y-2 pt-2 border-t border-border">
-          <Row label="Servicio" value={service.name} />
-          <Row label="Fecha" value={format(new Date(appointment.starts_at), "EEEE, d 'de' MMMM", { locale: es })} />
-          <Row
-            label="Horario"
-            value={`${format(new Date(appointment.starts_at), "h:mm a")} – ${format(new Date(appointment.ends_at), "h:mm a")}`}
-          />
-          <Row label="Precio" value={formatCurrency(Number(appointment.price))} />
-          {appointment.notes && <Row label="Notas" value={appointment.notes} />}
+          <Row label="Servicio">
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="w-2.5 h-2.5 rounded-full inline-block"
+                style={{ background: service.color }}
+              />
+              {service.name}
+            </span>
+          </Row>
+          <Row label="Fecha">
+            <LocalLongDate iso={appointment.starts_at} />
+          </Row>
+          <Row label="Horario">
+            <LocalTimeRange startIso={appointment.starts_at} endIso={appointment.ends_at} />
+          </Row>
+          <Row label="Duración">
+            {Math.round(
+              (new Date(appointment.ends_at).getTime() -
+                new Date(appointment.starts_at).getTime()) /
+                60000
+            )}{" "}
+            minutos
+          </Row>
+          <Row label="Precio">{formatCurrency(Number(appointment.price))}</Row>
+          <Row label="Teléfono">
+            <a href={`tel:${client.phone}`} className="text-brand font-semibold">
+              {client.phone}
+            </a>
+          </Row>
+          {client.email && (
+            <Row label="Correo">
+              <a href={`mailto:${client.email}`} className="text-brand font-semibold break-all">
+                {client.email}
+              </a>
+            </Row>
+          )}
+          {appointment.notes && <Row label="Notas">{appointment.notes}</Row>}
         </dl>
       </div>
 
@@ -177,11 +205,11 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4 text-sm">
-      <dt className="text-muted">{label}</dt>
-      <dd className="text-foreground font-medium text-right">{value}</dd>
+      <dt className="text-muted shrink-0">{label}</dt>
+      <dd className="text-foreground font-medium text-right">{children}</dd>
     </div>
   );
 }

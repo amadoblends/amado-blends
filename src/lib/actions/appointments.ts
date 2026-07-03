@@ -68,6 +68,7 @@ const rescheduleSchema = z.object({
   appointmentId: z.string().uuid(),
   serviceId: z.string().uuid(),
   startsAt: z.string().min(10),
+  displayWhen: z.string().max(120).optional(),
 });
 
 export async function rescheduleAppointment(formData: FormData): Promise<ActionResult> {
@@ -81,6 +82,7 @@ export async function rescheduleAppointment(formData: FormData): Promise<ActionR
     appointmentId: formData.get("appointmentId"),
     serviceId: formData.get("serviceId"),
     startsAt: formData.get("startsAt"),
+    displayWhen: formData.get("displayWhen") || undefined,
   });
   if (!parsed.success) return { ok: false, error: "Datos inválidos." };
 
@@ -114,10 +116,40 @@ export async function rescheduleAppointment(formData: FormData): Promise<ActionR
     return { ok: false, error: "No se pudo reagendar la cita." };
   }
 
+  await notifyAppointmentClient(
+    supabase,
+    parsed.data.appointmentId,
+    "Tu cita fue reagendada 📅",
+    parsed.data.displayWhen
+      ? `Tu nueva cita es el ${parsed.data.displayWhen}. Toca para ver los detalles.`
+      : "El barbero cambió el horario de tu cita. Toca para ver los detalles."
+  );
+
   revalidatePath("/citas");
   revalidatePath(`/citas/${parsed.data.appointmentId}`);
   revalidatePath("/");
   return { ok: true };
+}
+
+// Insert an in-app notification for the appointment's client (best-effort)
+async function notifyAppointmentClient(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  appointmentId: string,
+  title: string,
+  body: string
+) {
+  const { data: apt } = await supabase
+    .from("appointments")
+    .select("client_id")
+    .eq("id", appointmentId)
+    .single();
+  if (!apt?.client_id) return;
+  await supabase.from("notifications").insert({
+    client_id: apt.client_id,
+    title,
+    body,
+    type: "cita",
+  });
 }
 
 const statusSchema = z.enum(["confirmada", "pendiente", "completada", "cancelada"]);
@@ -141,6 +173,22 @@ export async function updateAppointmentStatus(appointmentId: string, status: str
     .eq("id", parsedId.data);
 
   if (error) return { ok: false, error: "No se pudo actualizar la cita." };
+
+  if (parsedStatus.data === "cancelada") {
+    await notifyAppointmentClient(
+      supabase,
+      parsedId.data,
+      "Tu cita fue cancelada ❌",
+      "El barbero canceló tu cita. Puedes reservar un nuevo horario desde la app."
+    );
+  } else if (parsedStatus.data === "confirmada") {
+    await notifyAppointmentClient(
+      supabase,
+      parsedId.data,
+      "Tu cita fue confirmada ✅",
+      "Te esperamos. Toca para ver los detalles de tu cita."
+    );
+  }
 
   revalidatePath("/citas");
   revalidatePath("/");

@@ -26,7 +26,8 @@
       "Bash(git commit -m 'Fix timezone day-boundary bugs + hide occupied slots in wizard *)",
       "Bash(node scripts/gen-icons.js)",
       "Bash(git commit --allow-empty -m 'Trigger Vercel deploy after restoring GitHub App access *)",
-      "Bash(git commit -m 'Hide cancelled from timeline + Historial page with day/month/year filters *)"
+      "Bash(git commit -m 'Hide cancelled from timeline + Historial page with day/month/year filters *)",
+      "Bash(git commit -m 'Appointment detail timezone fix + full info, service redesign, promotions, client notifications *)"
     ]
   }
 }

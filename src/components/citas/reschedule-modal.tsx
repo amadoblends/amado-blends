@@ -145,6 +145,10 @@ export function RescheduleModal({
       fd.set("appointmentId", appointmentId);
       fd.set("serviceId", service.id);
       fd.set("startsAt", startsAt);
+      fd.set(
+        "displayWhen",
+        `${format(new Date(y, mo - 1, d), "EEEE d 'de' MMMM", { locale: es })} a las ${fmtSlot(time)}`
+      );
 
       const result = await rescheduleAppointment(fd);
       if (!result.ok) {
