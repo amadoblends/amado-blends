@@ -8,24 +8,32 @@ import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { AppointmentStatusActions } from "@/components/citas/status-actions";
+import { RescheduleButton } from "@/components/citas/reschedule-button";
+import { getAvailability } from "@/lib/data/availability";
 
 export default async function AppointmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: appointment }, { data: requestedProducts }] = await Promise.all([
-    supabase
-      .from("appointments")
-      .select(
-        "id, starts_at, ends_at, status, price, notes, clients(id, full_name, phone, avatar_url), services(name, color)"
-      )
-      .eq("id", id)
-      .single(),
-    supabase
-      .from("appointment_products")
-      .select("id, quantity, products(name, price, image_url)")
-      .eq("appointment_id", id),
-  ]);
+  const [{ data: appointment }, { data: requestedProducts }, { data: allServices }, availability] =
+    await Promise.all([
+      supabase
+        .from("appointments")
+        .select(
+          "id, starts_at, ends_at, status, price, notes, service_id, clients(id, full_name, phone, avatar_url), services(name, color)"
+        )
+        .eq("id", id)
+        .single(),
+      supabase
+        .from("appointment_products")
+        .select("id, quantity, products(name, price, image_url)")
+        .eq("appointment_id", id),
+      supabase
+        .from("services")
+        .select("id, name, duration_minutes, price, color")
+        .order("name"),
+      getAvailability(),
+    ]);
 
   if (!appointment) notFound();
 
@@ -105,6 +113,17 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
             Prepara estos productos antes de la llegada del cliente. Se pagan en el local.
           </p>
         </div>
+      )}
+
+      {appointment.status !== "cancelada" && appointment.status !== "completada" && (
+        <RescheduleButton
+          appointmentId={appointment.id}
+          currentServiceId={appointment.service_id}
+          currentStartsAt={appointment.starts_at}
+          currentEndsAt={appointment.ends_at}
+          services={allServices ?? []}
+          availability={availability}
+        />
       )}
 
       <AppointmentStatusActions appointmentId={appointment.id} currentStatus={appointment.status} />

@@ -64,6 +64,62 @@ export async function createAppointment(formData: FormData): Promise<ActionResul
   return { ok: true };
 }
 
+const rescheduleSchema = z.object({
+  appointmentId: z.string().uuid(),
+  serviceId: z.string().uuid(),
+  startsAt: z.string().min(10),
+});
+
+export async function rescheduleAppointment(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "No autenticado." };
+
+  const parsed = rescheduleSchema.safeParse({
+    appointmentId: formData.get("appointmentId"),
+    serviceId: formData.get("serviceId"),
+    startsAt: formData.get("startsAt"),
+  });
+  if (!parsed.success) return { ok: false, error: "Datos inválidos." };
+
+  const startsAt = new Date(parsed.data.startsAt);
+  if (Number.isNaN(startsAt.getTime())) return { ok: false, error: "Fecha/hora inválida." };
+
+  // Duration and price come from the (possibly new) service
+  const { data: service } = await supabase
+    .from("services")
+    .select("duration_minutes, price")
+    .eq("id", parsed.data.serviceId)
+    .single();
+  if (!service) return { ok: false, error: "Servicio no encontrado." };
+
+  const endsAt = new Date(startsAt.getTime() + service.duration_minutes * 60000);
+
+  const { error } = await supabase
+    .from("appointments")
+    .update({
+      service_id: parsed.data.serviceId,
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+      price: service.price,
+    })
+    .eq("id", parsed.data.appointmentId);
+
+  if (error) {
+    if (error.code === "23P01") {
+      return { ok: false, error: "Ya existe una cita en ese horario." };
+    }
+    return { ok: false, error: "No se pudo reagendar la cita." };
+  }
+
+  revalidatePath("/citas");
+  revalidatePath(`/citas/${parsed.data.appointmentId}`);
+  revalidatePath("/");
+  return { ok: true };
+}
+
 const statusSchema = z.enum(["confirmada", "pendiente", "completada", "cancelada"]);
 
 export async function updateAppointmentStatus(appointmentId: string, status: string): Promise<ActionResult> {

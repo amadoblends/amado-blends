@@ -16,6 +16,7 @@ export interface ServiceData {
   color: string;
   kind: ServiceKind;
   image_url: string | null;
+  is_public?: boolean;
   package_item_ids?: string[];
 }
 
@@ -35,12 +36,14 @@ export function ServiceModal({
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(service?.image_url ?? null);
   const [kind, setKind] = useState<ServiceKind>(service?.kind ?? "single");
+  const [isPublic, setIsPublic] = useState(service?.is_public ?? true);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set(service?.package_item_ids ?? []));
 
   function handleSubmit(formData: FormData) {
     setError(null);
     formData.set("imageUrl", imageUrl ?? "");
     formData.set("kind", kind);
+    formData.set("isPublic", String(isPublic));
 
     startTransition(async () => {
       const result = await upsertService(service?.id ?? null, formData);
@@ -113,6 +116,33 @@ export function ServiceModal({
         <Field label="Color">
           <input type="color" name="color" defaultValue={service?.color ?? "#FF6A3D"} className="form-input h-12" />
         </Field>
+
+        {/* Public visibility toggle */}
+        <div className="flex items-center justify-between gap-3 bg-background rounded-xl border border-border px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Visible para clientes</p>
+            <p className="text-xs text-muted mt-0.5">
+              Si lo ocultas, no aparece en la app de reservas pero sigue disponible en paquetes y
+              para ti.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsPublic((v) => !v)}
+            aria-label={isPublic ? "Ocultar de clientes" : "Mostrar a clientes"}
+            className={cn(
+              "relative h-6 w-11 rounded-full transition-colors shrink-0",
+              isPublic ? "bg-brand" : "bg-border"
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
+                isPublic ? "translate-x-[22px]" : "translate-x-0.5"
+              )}
+            />
+          </button>
+        </div>
 
         {kind === "package" && (
           <div>

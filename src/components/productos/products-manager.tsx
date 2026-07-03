@@ -3,13 +3,23 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { AlertTriangle, ChevronLeft, Plus } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Plus, Package, DollarSign, PackageX } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { ProductModal, type ProductData } from "@/components/productos/product-modal";
 
 export function ProductsManager({ products }: { products: ProductData[] }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ProductData | null>(null);
+
+  const totalUnits = products.reduce((acc, p) => acc + p.stock, 0);
+  const inventoryValue = products.reduce((acc, p) => acc + Number(p.price) * p.stock, 0);
+  const lowCount = products.filter(
+    (p) => p.stock > p.critical_stock_threshold && p.stock <= p.low_stock_threshold
+  ).length;
+  const outCount = products.filter((p) => p.stock === 0).length;
+  const criticalCount = products.filter(
+    (p) => p.stock > 0 && p.stock <= p.critical_stock_threshold
+  ).length;
 
   function openCreate() {
     setEditing(null);
@@ -38,6 +48,46 @@ export function ProductsManager({ products }: { products: ProductData[] }) {
           <Plus size={20} />
         </button>
       </header>
+
+      {/* Inventory summary */}
+      {products.length > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-surface rounded-2xl border border-border p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Package size={15} className="text-brand" />
+              <p className="text-xs text-muted">Inventario total</p>
+            </div>
+            <p className="text-xl font-bold text-foreground">{totalUnits} unidades</p>
+            <p className="text-xs text-muted">{products.length} productos</p>
+          </div>
+          <div className="bg-surface rounded-2xl border border-border p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign size={15} className="text-success" />
+              <p className="text-xs text-muted">Valor del inventario</p>
+            </div>
+            <p className="text-xl font-bold text-foreground">{formatCurrency(inventoryValue)}</p>
+            <p className="text-xs text-muted">a precio de venta</p>
+          </div>
+          <div className="bg-surface rounded-2xl border border-border p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle size={15} className="text-warning" />
+              <p className="text-xs text-muted">Stock bajo</p>
+            </div>
+            <p className="text-xl font-bold text-foreground">{lowCount + criticalCount}</p>
+            <p className="text-xs text-muted">
+              {criticalCount > 0 ? `${criticalCount} en crítico` : "por reabastecer"}
+            </p>
+          </div>
+          <div className="bg-surface rounded-2xl border border-border p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <PackageX size={15} className="text-danger" />
+              <p className="text-xs text-muted">Agotados</p>
+            </div>
+            <p className="text-xl font-bold text-foreground">{outCount}</p>
+            <p className="text-xs text-muted">sin stock</p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-surface rounded-2xl border border-border divide-y divide-border overflow-hidden">
         {products.length === 0 ? (

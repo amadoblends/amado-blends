@@ -74,6 +74,7 @@ const serviceSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   kind: z.enum(["single", "package"]),
   imageUrl: z.string().url().max(2000).optional().or(z.literal("")),
+  isPublic: z.enum(["true", "false"]).default("true"),
 });
 
 export async function upsertService(serviceId: string | null, formData: FormData): Promise<ActionResult> {
@@ -88,6 +89,7 @@ export async function upsertService(serviceId: string | null, formData: FormData
     color: formData.get("color"),
     kind: formData.get("kind") || "single",
     imageUrl: formData.get("imageUrl") || "",
+    isPublic: formData.get("isPublic") || "true",
   });
 
   if (!parsed.success) return { ok: false, error: "Revisa los datos del servicio." };
@@ -108,6 +110,7 @@ export async function upsertService(serviceId: string | null, formData: FormData
     color: parsed.data.color,
     kind: parsed.data.kind,
     image_url: parsed.data.imageUrl || null,
+    is_public: parsed.data.isPublic === "true",
   };
 
   let id = serviceId;
