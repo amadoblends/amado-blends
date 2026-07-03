@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
+import { ShoppingBag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AppointmentRow } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
@@ -140,6 +142,33 @@ export function DayTimeline({
                 </p>
                 {height > 46 && (
                   <p className="text-[10px] text-muted truncate leading-tight">{a.service.name}</p>
+                )}
+                {/* Product thumbnails: know what to prepare at a glance */}
+                {a.products.length > 0 && height > 64 && (
+                  <div className="flex items-center gap-1 mt-1">
+                    {a.products.slice(0, 4).map((p, i) =>
+                      p.image_url ? (
+                        <div
+                          key={i}
+                          className="w-5 h-5 rounded overflow-hidden border border-border shrink-0 relative"
+                          title={`${p.quantity}× ${p.name}`}
+                        >
+                          <Image src={p.image_url} alt={p.name} fill className="object-cover" />
+                        </div>
+                      ) : (
+                        <div
+                          key={i}
+                          className="w-5 h-5 rounded bg-background border border-border flex items-center justify-center shrink-0"
+                          title={`${p.quantity}× ${p.name}`}
+                        >
+                          <ShoppingBag size={10} className="text-muted" />
+                        </div>
+                      )
+                    )}
+                    <span className="text-[9px] font-semibold text-muted">
+                      {a.products.reduce((acc, p) => acc + p.quantity, 0)} prod.
+                    </span>
+                  </div>
                 )}
               </Link>
             );

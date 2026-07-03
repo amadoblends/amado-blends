@@ -15,25 +15,34 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: appointment }, { data: requestedProducts }, { data: allServices }, availability] =
-    await Promise.all([
-      supabase
-        .from("appointments")
-        .select(
-          "id, starts_at, ends_at, status, price, notes, service_id, clients(id, full_name, phone, avatar_url), services(name, color)"
-        )
-        .eq("id", id)
-        .single(),
-      supabase
-        .from("appointment_products")
-        .select("id, quantity, products(name, price, image_url)")
-        .eq("appointment_id", id),
-      supabase
-        .from("services")
-        .select("id, name, duration_minutes, price, color")
-        .order("name"),
-      getAvailability(),
-    ]);
+  const [
+    { data: appointment },
+    { data: requestedProducts },
+    { data: guests },
+    { data: allServices },
+    availability,
+  ] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select(
+        "id, starts_at, ends_at, status, price, notes, service_id, clients(id, full_name, phone, avatar_url), services(name, color)"
+      )
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("appointment_products")
+      .select("id, quantity, products(name, price, image_url)")
+      .eq("appointment_id", id),
+    supabase
+      .from("appointment_guests")
+      .select("id, full_name, phone, email")
+      .eq("appointment_id", id),
+    supabase
+      .from("services")
+      .select("id, name, duration_minutes, price, color")
+      .order("name"),
+    getAvailability(),
+  ]);
 
   if (!appointment) notFound();
 
@@ -112,6 +121,25 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
           <p className="text-xs text-muted pt-2 border-t border-border">
             Prepara estos productos antes de la llegada del cliente. Se pagan en el local.
           </p>
+        </div>
+      )}
+
+      {guests && guests.length > 0 && (
+        <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
+          <p className="font-semibold text-foreground text-sm">👥 Invitados del cliente</p>
+          <div className="space-y-2">
+            {guests.map((g) => (
+              <div key={g.id} className="flex items-center justify-between gap-3 text-sm">
+                <div className="min-w-0">
+                  <p className="text-foreground font-medium truncate">{g.full_name}</p>
+                  {g.email && <p className="text-xs text-muted truncate">{g.email}</p>}
+                </div>
+                <a href={`tel:${g.phone}`} className="text-brand font-semibold shrink-0">
+                  {g.phone}
+                </a>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

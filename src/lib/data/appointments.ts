@@ -1,6 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { startOfDay, endOfDay } from "date-fns";
 
+export interface AppointmentProduct {
+  quantity: number;
+  name: string;
+  image_url: string | null;
+}
+
 export interface AppointmentRow {
   id: string;
   starts_at: string;
@@ -9,6 +15,7 @@ export interface AppointmentRow {
   price: number;
   client: { id: string; full_name: string; avatar_url: string | null };
   service: { id: string; name: string; color: string };
+  products: AppointmentProduct[];
 }
 
 export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[]> {
@@ -21,7 +28,7 @@ export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[
   const { data, error } = await supabase
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, status, price, clients(id, full_name, avatar_url), services(id, name, color)"
+      "id, starts_at, ends_at, status, price, clients(id, full_name, avatar_url), services(id, name, color), appointment_products(quantity, products(name, image_url))"
     )
     .gte("starts_at", from.toISOString())
     .lte("starts_at", to.toISOString())
@@ -37,6 +44,14 @@ export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[
     price: Number(a.price),
     client: a.clients as unknown as AppointmentRow["client"],
     service: a.services as unknown as AppointmentRow["service"],
+    products: ((a.appointment_products as unknown as {
+      quantity: number;
+      products: { name: string; image_url: string | null };
+    }[]) ?? []).map((ap) => ({
+      quantity: ap.quantity,
+      name: ap.products?.name ?? "",
+      image_url: ap.products?.image_url ?? null,
+    })),
   }));
 }
 
