@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ShoppingBag } from "lucide-react";
+import { ShoppingBag, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { AppointmentRow } from "@/lib/data/appointments";
+import type { AppointmentRow, BlockedRange } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 
 const HOUR_H = 80;
@@ -81,14 +81,17 @@ export function DayTimeline({
   appointments: allAppointments,
   dayAvail,
   dateStr,
+  blockedTimes = [],
 }: {
   appointments: AppointmentRow[];
   dayAvail: AvailabilityDay | null;
   dateStr: string;
+  blockedTimes?: BlockedRange[];
 }) {
   // Server fetches a widened window (UTC vs local timezone); keep only
   // appointments that fall on the selected local day.
   const appointments = allAppointments.filter((a) => localDateStr(a.starts_at) === dateStr);
+  const blocked = blockedTimes.filter((b) => localDateStr(b.starts_at) === dateStr);
 
   if (!dayAvail?.is_active) {
     return (
@@ -155,6 +158,30 @@ export function DayTimeline({
               <span className="text-[9px] text-muted">Descanso</span>
             </div>
           )}
+
+          {/* Blocked hours */}
+          {blocked.map((b) => {
+            const sMins = localMins(b.starts_at);
+            const durMins =
+              (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000;
+            const top = ((sMins - dayStart) / 60) * HOUR_H;
+            const height = Math.max((durMins / 60) * HOUR_H - 2, 20);
+            return (
+              <div
+                key={b.id}
+                className="absolute left-1 right-1 rounded-lg flex items-center justify-center gap-1 border border-dashed border-border"
+                style={{
+                  top,
+                  height,
+                  background:
+                    "repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 12px)",
+                }}
+              >
+                <Lock size={11} className="text-muted" />
+                <span className="text-[10px] font-semibold text-muted">Bloqueado</span>
+              </div>
+            );
+          })}
 
           {/* Appointment blocks */}
           {appointments.map((a) => {

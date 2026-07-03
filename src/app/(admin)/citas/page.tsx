@@ -1,12 +1,17 @@
 import { format, startOfWeek, addDays } from "date-fns";
 import { Bell } from "lucide-react";
 import Link from "next/link";
-import { getAppointmentsForDay, getAppointmentStarts } from "@/lib/data/appointments";
+import {
+  getAppointmentsForDay,
+  getAppointmentStarts,
+  getBlockedTimesForDay,
+} from "@/lib/data/appointments";
 import { getAvailability, getBookingSettings } from "@/lib/data/availability";
 import { createClient } from "@/lib/supabase/server";
 import { DateStrip } from "@/components/citas/date-strip";
 import { DayNav } from "@/components/citas/day-nav";
 import { DayCitasShell } from "@/components/citas/day-shell";
+import { BackButton } from "@/components/ui/back-button";
 
 export default async function CitasPage({
   searchParams,
@@ -22,17 +27,24 @@ export default async function CitasPage({
 
   const supabase = await createClient();
 
-  const [appointments, appointmentStarts, availability, bookingSettings, { data: servicesData }] =
-    await Promise.all([
-      getAppointmentsForDay(date),
-      getAppointmentStarts(weekStart, weekEnd),
-      getAvailability(),
-      getBookingSettings(),
-      supabase
-        .from("services")
-        .select("id, name, duration_minutes, price, color")
-        .order("name"),
-    ]);
+  const [
+    appointments,
+    appointmentStarts,
+    availability,
+    bookingSettings,
+    blockedTimes,
+    { data: servicesData },
+  ] = await Promise.all([
+    getAppointmentsForDay(date),
+    getAppointmentStarts(weekStart, weekEnd),
+    getAvailability(),
+    getBookingSettings(),
+    getBlockedTimesForDay(date),
+    supabase
+      .from("services")
+      .select("id, name, duration_minutes, price, color")
+      .order("name"),
+  ]);
 
   const activeWeekdays = availability.filter((d) => d.is_active).map((d) => d.weekday);
 
@@ -43,7 +55,10 @@ export default async function CitasPage({
   return (
     <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-foreground">Citas</h1>
+        <div className="flex items-center gap-3">
+          <BackButton />
+          <h1 className="text-xl font-bold text-foreground">Citas</h1>
+        </div>
         <Link
           href="/notificaciones"
           className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center"
@@ -65,6 +80,7 @@ export default async function CitasPage({
         availability={availability}
         services={servicesData ?? []}
         dateStr={dateStr}
+        blockedTimes={blockedTimes}
       />
     </div>
   );

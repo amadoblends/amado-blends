@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ClientSearch } from "@/components/clientes/client-search";
+import { BackButton } from "@/components/ui/back-button";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -41,7 +42,10 @@ export default async function ClientsPage({
   return (
     <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-foreground">Clientes</h1>
+        <div className="flex items-center gap-3">
+          <BackButton />
+          <h1 className="text-xl font-bold text-foreground">Clientes</h1>
+        </div>
         <div className="flex items-center gap-2">
           <Link href="/notificaciones" className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">
             <Bell size={18} />

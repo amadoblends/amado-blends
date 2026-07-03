@@ -92,13 +92,23 @@ export function DayForm({
 
       <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
         <p className="text-base font-semibold text-foreground">Tiempo entre citas</p>
-        <select name="slotMinutes" defaultValue={defaults.slotMinutes} className="form-input">
-          {[15, 30, 45, 60].map((m) => (
-            <option key={m} value={m}>
-              {m} minutos
-            </option>
-          ))}
-        </select>
+        <p className="text-sm text-muted -mt-1.5">
+          Cada cuántos minutos se ofrecen turnos. Escribe el número que quieras (5 a 240).
+        </p>
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            name="slotMinutes"
+            min={5}
+            max={240}
+            step={5}
+            required
+            defaultValue={defaults.slotMinutes}
+            inputMode="numeric"
+            className="form-input !w-28 text-center font-semibold"
+          />
+          <span className="text-sm text-muted">minutos</span>
+        </div>
       </div>
 
       {error && <p className="text-sm text-danger bg-danger-light rounded-lg px-3 py-2">{error}</p>}

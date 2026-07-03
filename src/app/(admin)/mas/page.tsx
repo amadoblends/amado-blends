@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions/auth";
 import { Avatar } from "@/components/ui/avatar";
+import { BackButton } from "@/components/ui/back-button";
 import Link from "next/link";
 import {
   Package,
@@ -11,12 +12,14 @@ import {
   ShieldCheck,
   CalendarClock,
   UserCircle,
+  BadgePercent,
 } from "lucide-react";
 
 const menu = [
   { href: "/perfil", label: "Mi perfil", icon: UserCircle },
   { href: "/productos", label: "Productos e inventario", icon: Package },
   { href: "/servicios", label: "Servicios", icon: Scissors },
+  { href: "/promociones", label: "Promociones", icon: BadgePercent },
   { href: "/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
   { href: "/notificaciones", label: "Notificaciones", icon: Bell },
 ];
@@ -32,7 +35,10 @@ export default async function MorePage() {
 
   return (
     <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-6">
-      <h1 className="text-xl font-bold text-foreground">Más</h1>
+      <header className="flex items-center gap-3">
+        <BackButton />
+        <h1 className="text-xl font-bold text-foreground">Más</h1>
+      </header>
 
       <Link
         href="/perfil"

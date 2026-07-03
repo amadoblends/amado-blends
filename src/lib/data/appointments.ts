@@ -101,6 +101,25 @@ export async function getAppointmentsHistory(start: Date, end: Date): Promise<Hi
   });
 }
 
+export interface BlockedRange {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+}
+
+export async function getBlockedTimesForDay(date: Date): Promise<BlockedRange[]> {
+  const supabase = await createClient();
+  const from = new Date(startOfDay(date).getTime() - 14 * 3600_000);
+  const to = new Date(endOfDay(date).getTime() + 14 * 3600_000);
+  const { data, error } = await supabase
+    .from("blocked_times")
+    .select("id, starts_at, ends_at")
+    .lt("starts_at", to.toISOString())
+    .gt("ends_at", from.toISOString());
+  if (error || !data) return [];
+  return data;
+}
+
 // Returns raw ISO timestamps; the client component groups them by LOCAL date
 // (grouping on the server would use UTC and shift evening appointments a day).
 export async function getAppointmentStarts(start: Date, end: Date): Promise<string[]> {

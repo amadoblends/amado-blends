@@ -1,6 +1,7 @@
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 import { getAppointmentsHistory } from "@/lib/data/appointments";
 import { HistoryView, type Period } from "@/components/historial/history-view";
+import { BackButton } from "@/components/ui/back-button";
 
 export default async function HistorialPage({
   searchParams,
@@ -24,9 +25,12 @@ export default async function HistorialPage({
 
   return (
     <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-4">
-      <header>
-        <h1 className="text-xl font-bold text-foreground">Historial</h1>
-        <p className="text-sm text-muted">Todas tus citas: completadas, canceladas y más</p>
+      <header className="flex items-center gap-3">
+        <BackButton />
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Historial</h1>
+          <p className="text-sm text-muted">Todas tus citas: completadas, canceladas y más</p>
+        </div>
       </header>
 
       <HistoryView

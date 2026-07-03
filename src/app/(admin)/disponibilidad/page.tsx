@@ -74,19 +74,6 @@ export default async function AvailabilityPage() {
         })}
       </div>
 
-      <Link
-        href="/disponibilidad/configuracion"
-        className="flex items-center gap-3 bg-surface rounded-2xl border border-border px-4 py-4 active:bg-background"
-      >
-        <div className="w-9 h-9 rounded-xl bg-brand-light flex items-center justify-center shrink-0">
-          <Settings2 size={18} className="text-brand" />
-        </div>
-        <div className="flex-1">
-          <p className="text-base font-semibold text-foreground">Configuración de reservas</p>
-          <p className="text-sm text-muted">Ventana, antelación, buffer entre citas</p>
-        </div>
-        <ChevronRight size={18} className="text-muted" />
-      </Link>
     </div>
   );
 }

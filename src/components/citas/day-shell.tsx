@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { DayTimeline } from "./timeline";
 import { AppointmentWizard } from "./wizard";
+import { BlockHoursButton } from "./block-hours";
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
-import type { AppointmentRow } from "@/lib/data/appointments";
+import type { AppointmentRow, BlockedRange } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 import type { ServiceOption } from "./wizard";
 
@@ -16,20 +17,29 @@ export function DayCitasShell({
   availability,
   services,
   dateStr,
+  blockedTimes = [],
 }: {
   appointments: AppointmentRow[];
   dayAvail: AvailabilityDay | null;
   availability: AvailabilityDay[];
   services: ServiceOption[];
   dateStr: string;
+  blockedTimes?: BlockedRange[];
 }) {
   const router = useRouter();
   const [wizardOpen, setWizardOpen] = useState(false);
 
   return (
     <>
-      <RealtimeRefresher tables={["appointments"]} />
-      <DayTimeline appointments={appointments} dayAvail={dayAvail} dateStr={dateStr} />
+      <RealtimeRefresher tables={["appointments", "blocked_times"]} />
+      <DayTimeline
+        appointments={appointments}
+        dayAvail={dayAvail}
+        dateStr={dateStr}
+        blockedTimes={blockedTimes}
+      />
+
+      <BlockHoursButton dateStr={dateStr} dayAvail={dayAvail} />
 
       <AppointmentWizard
         open={wizardOpen}
