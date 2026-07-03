@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
+import { Switch } from "@/components/ui/switch";
 import { ImageUploader } from "@/components/ui/image-uploader";
 import { upsertService, deleteService } from "@/lib/actions/products";
 import { cn } from "@/lib/utils";
@@ -126,22 +127,11 @@ export function ServiceModal({
               para ti.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsPublic((v) => !v)}
-            aria-label={isPublic ? "Ocultar de clientes" : "Mostrar a clientes"}
-            className={cn(
-              "relative h-6 w-11 rounded-full transition-colors shrink-0",
-              isPublic ? "bg-brand" : "bg-border"
-            )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-                isPublic ? "translate-x-[22px]" : "translate-x-0.5"
-              )}
-            />
-          </button>
+          <Switch
+            checked={isPublic}
+            onChange={() => setIsPublic((v) => !v)}
+            label={isPublic ? "Ocultar de clientes" : "Mostrar a clientes"}
+          />
         </div>
 
         {kind === "package" && (

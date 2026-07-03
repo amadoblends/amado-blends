@@ -25,7 +25,7 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
     supabase
       .from("appointments")
       .select(
-        "id, starts_at, ends_at, status, price, notes, service_id, clients(id, full_name, phone, avatar_url), services(name, color)"
+        "id, starts_at, ends_at, status, price, notes, service_id, clients(id, full_name, phone, email, avatar_url, quick_notes), services(name, color)"
       )
       .eq("id", id)
       .single(),
@@ -35,7 +35,7 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
       .eq("appointment_id", id),
     supabase
       .from("appointment_guests")
-      .select("id, full_name, phone, email")
+      .select("id, full_name, phone, email, services(name)")
       .eq("appointment_id", id),
     supabase
       .from("services")
@@ -50,7 +50,9 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
     id: string;
     full_name: string;
     phone: string;
+    email: string | null;
     avatar_url: string | null;
+    quick_notes: string | null;
   };
   const service = appointment.services as unknown as { name: string; color: string };
 
@@ -69,16 +71,26 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-foreground truncate">{client.full_name}</p>
             <p className="text-sm text-muted">{client.phone}</p>
+            {client.email && <p className="text-xs text-muted truncate">{client.email}</p>}
           </div>
           <StatusBadge status={appointment.status} />
         </div>
+
+        {client.quick_notes && (
+          <div className="bg-brand-light rounded-xl px-3 py-2">
+            <p className="text-xs text-brand font-medium">📝 {client.quick_notes}</p>
+          </div>
+        )}
 
         <div className="flex gap-2">
           <a href={`tel:${client.phone}`} className="flex-1 flex items-center justify-center gap-2 border border-border rounded-xl py-2.5 text-sm font-semibold">
             <Phone size={16} /> Llamar
           </a>
+          <a href={`sms:${client.phone}`} className="flex-1 flex items-center justify-center gap-2 border border-border rounded-xl py-2.5 text-sm font-semibold">
+            <MessageSquare size={16} /> Mensaje
+          </a>
           <Link href={`/clientes/${client.id}`} className="flex-1 flex items-center justify-center gap-2 border border-border rounded-xl py-2.5 text-sm font-semibold">
-            <MessageSquare size={16} /> Ver cliente
+            Ver perfil
           </Link>
         </div>
 
@@ -128,17 +140,23 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
         <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
           <p className="font-semibold text-foreground text-sm">👥 Invitados del cliente</p>
           <div className="space-y-2">
-            {guests.map((g) => (
-              <div key={g.id} className="flex items-center justify-between gap-3 text-sm">
-                <div className="min-w-0">
-                  <p className="text-foreground font-medium truncate">{g.full_name}</p>
-                  {g.email && <p className="text-xs text-muted truncate">{g.email}</p>}
+            {guests.map((g) => {
+              const guestService = g.services as unknown as { name: string } | null;
+              return (
+                <div key={g.id} className="flex items-center justify-between gap-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="text-foreground font-medium truncate">{g.full_name}</p>
+                    <p className="text-xs text-muted truncate">
+                      {guestService ? `✂️ ${guestService.name}` : "Sin servicio elegido"}
+                      {g.email ? ` · ${g.email}` : ""}
+                    </p>
+                  </div>
+                  <a href={`tel:${g.phone}`} className="text-brand font-semibold shrink-0">
+                    {g.phone}
+                  </a>
                 </div>
-                <a href={`tel:${g.phone}`} className="text-brand font-semibold shrink-0">
-                  {g.phone}
-                </a>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -32,6 +32,51 @@ function localDateStr(iso: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function initials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+}
+
+function InitialsCircle({
+  name,
+  avatarUrl,
+  color,
+  size = 22,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  color: string;
+  size?: number;
+}) {
+  if (avatarUrl) {
+    return (
+      <div
+        className="rounded-full overflow-hidden border border-white/40 shrink-0 relative"
+        style={{ width: size, height: size }}
+        title={name}
+      >
+        <Image src={avatarUrl} alt={name} fill className="object-cover" />
+      </div>
+    );
+  }
+  return (
+    <div
+      className="rounded-full flex items-center justify-center shrink-0 border border-white/40"
+      style={{ width: size, height: size, background: color }}
+      title={name}
+    >
+      <span className="text-white font-bold" style={{ fontSize: size * 0.38 }}>
+        {initials(name)}
+      </span>
+    </div>
+  );
+}
+
 export function DayTimeline({
   appointments: allAppointments,
   dayAvail,
@@ -137,9 +182,20 @@ export function DayTimeline({
                 >
                   {fmtMins(sMins)} – {fmtMins(sMins + durMins)}
                 </p>
-                <p className="text-xs font-semibold text-foreground truncate leading-tight">
-                  {a.client.full_name}
-                </p>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <InitialsCircle
+                    name={a.client.full_name}
+                    avatarUrl={a.client.avatar_url}
+                    color={a.service.color}
+                  />
+                  <p className="text-xs font-semibold text-foreground truncate leading-tight flex-1">
+                    {a.client.full_name}
+                  </p>
+                  {/* One small circle per guest */}
+                  {a.guests.slice(0, 3).map((g, i) => (
+                    <InitialsCircle key={i} name={g} color={a.service.color} size={18} />
+                  ))}
+                </div>
                 {height > 46 && (
                   <p className="text-[10px] text-muted truncate leading-tight">{a.service.name}</p>
                 )}

@@ -3,7 +3,20 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateAvailabilityDay } from "@/lib/actions/availability";
-import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
+
+// 6:00 AM – 11:00 PM in 15-minute steps, formatted for display
+const TIME_OPTIONS: { value: string; label: string }[] = [];
+for (let mins = 6 * 60; mins <= 23 * 60; mins += 15) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const period = h >= 12 ? "PM" : "AM";
+  const displayH = h % 12 === 0 ? 12 : h % 12;
+  TIME_OPTIONS.push({
+    value: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
+    label: `${displayH}:${String(m).padStart(2, "0")} ${period}`,
+  });
+}
 
 export function DayForm({
   weekday,
@@ -42,56 +55,50 @@ export function DayForm({
 
   return (
     <form action={handleSubmit} className="space-y-4">
-      <div className="bg-surface rounded-2xl border border-border p-4 flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">Día laboral</p>
-        <button
-          type="button"
-          onClick={() => setActive((v) => !v)}
-          className={cn("relative h-6 w-11 rounded-full transition-colors", active ? "bg-brand" : "bg-border")}
-        >
-          <span
-            className={cn(
-              "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-              active ? "translate-x-[22px]" : "translate-x-0.5"
-            )}
-          />
-        </button>
+      <div className="bg-surface rounded-2xl border border-border p-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-base font-semibold text-foreground">Día laboral</p>
+          <p className="text-sm text-muted mt-0.5">
+            {active ? "Aceptas citas este día" : "Día libre, sin citas"}
+          </p>
+        </div>
+        <Switch checked={active} onChange={() => setActive((v) => !v)} label="Día laboral" />
       </div>
 
       <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
-        <p className="text-sm font-semibold text-foreground">Horario de trabajo</p>
+        <p className="text-base font-semibold text-foreground">Horario de trabajo</p>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Desde">
-            <input type="time" name="startTime" required defaultValue={defaults.startTime} className="form-input" />
+            <TimeSelect name="startTime" defaultValue={defaults.startTime} required />
           </Field>
           <Field label="Hasta">
-            <input type="time" name="endTime" required defaultValue={defaults.endTime} className="form-input" />
+            <TimeSelect name="endTime" defaultValue={defaults.endTime} required />
           </Field>
         </div>
       </div>
 
       <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
-        <p className="text-sm font-semibold text-foreground">Descanso (opcional)</p>
+        <p className="text-base font-semibold text-foreground">Descanso (opcional)</p>
+        <p className="text-sm text-muted -mt-1.5">Ej. hora de almuerzo. Déjalo vacío si no aplica.</p>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Desde">
-            <input type="time" name="breakStartTime" defaultValue={defaults.breakStartTime} className="form-input" />
+            <TimeSelect name="breakStartTime" defaultValue={defaults.breakStartTime} allowEmpty />
           </Field>
           <Field label="Hasta">
-            <input type="time" name="breakEndTime" defaultValue={defaults.breakEndTime} className="form-input" />
+            <TimeSelect name="breakEndTime" defaultValue={defaults.breakEndTime} allowEmpty />
           </Field>
         </div>
       </div>
 
-      <div className="bg-surface rounded-2xl border border-border p-4">
-        <Field label="Tiempo entre citas">
-          <select name="slotMinutes" defaultValue={defaults.slotMinutes} className="form-input">
-            {[15, 30, 45, 60].map((m) => (
-              <option key={m} value={m}>
-                {m} min
-              </option>
-            ))}
-          </select>
-        </Field>
+      <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
+        <p className="text-base font-semibold text-foreground">Tiempo entre citas</p>
+        <select name="slotMinutes" defaultValue={defaults.slotMinutes} className="form-input">
+          {[15, 30, 45, 60].map((m) => (
+            <option key={m} value={m}>
+              {m} minutos
+            </option>
+          ))}
+        </select>
       </div>
 
       {error && <p className="text-sm text-danger bg-danger-light rounded-lg px-3 py-2">{error}</p>}
@@ -111,17 +118,43 @@ export function DayForm({
           border-radius: 0.75rem;
           border: 1px solid var(--border);
           background: var(--background);
-          font-size: 0.875rem;
+          font-size: 1rem;
+          color: var(--foreground);
+          appearance: none;
+          -webkit-appearance: none;
         }
       `}</style>
     </form>
   );
 }
 
+function TimeSelect({
+  name,
+  defaultValue,
+  required,
+  allowEmpty,
+}: {
+  name: string;
+  defaultValue: string;
+  required?: boolean;
+  allowEmpty?: boolean;
+}) {
+  return (
+    <select name={name} defaultValue={defaultValue} required={required} className="form-input">
+      {allowEmpty && <option value="">— Sin definir —</option>}
+      {TIME_OPTIONS.map((t) => (
+        <option key={t.value} value={t.value}>
+          {t.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-xs font-medium text-muted mb-1.5 block">{label}</label>
+      <label className="text-sm font-semibold text-foreground mb-1.5 block">{label}</label>
       {children}
     </div>
   );

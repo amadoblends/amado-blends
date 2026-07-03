@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toggleAvailabilityDay } from "@/lib/actions/availability";
-import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 export function DayToggle({ weekday, isActive }: { weekday: number; isActive: boolean }) {
   const router = useRouter();
@@ -17,9 +17,7 @@ export function DayToggle({ weekday, isActive }: { weekday: number; isActive: bo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
-  function handleClick(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  function handleToggle() {
     const next = !checked;
     setChecked(next);
     startTransition(async () => {
@@ -33,22 +31,11 @@ export function DayToggle({ weekday, isActive }: { weekday: number; isActive: bo
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
+    <Switch
+      checked={checked}
+      onChange={handleToggle}
       disabled={isPending}
-      aria-label={checked ? "Desactivar día" : "Activar día"}
-      className={cn(
-        "relative h-6 w-11 rounded-full transition-colors shrink-0 disabled:opacity-60",
-        checked ? "bg-brand" : "bg-border"
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-          checked ? "translate-x-[22px]" : "translate-x-0.5"
-        )}
-      />
-    </button>
+      label={checked ? "Desactivar día" : "Activar día"}
+    />
   );
 }
