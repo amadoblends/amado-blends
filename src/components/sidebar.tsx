@@ -10,6 +10,7 @@ import {
   Scissors,
   CalendarClock,
   Bell,
+  History,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ import { signOut } from "@/lib/actions/auth";
 const links = [
   { href: "/", label: "Inicio", icon: Home },
   { href: "/citas", label: "Citas", icon: Calendar },
+  { href: "/historial", label: "Historial", icon: History },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/productos", label: "Productos", icon: Package },
   { href: "/servicios", label: "Servicios", icon: Scissors },

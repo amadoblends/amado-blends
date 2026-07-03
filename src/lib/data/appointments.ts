@@ -32,6 +32,7 @@ export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[
     )
     .gte("starts_at", from.toISOString())
     .lte("starts_at", to.toISOString())
+    .neq("status", "cancelada")
     .order("starts_at", { ascending: true });
 
   if (error || !data) return [];
@@ -53,6 +54,47 @@ export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[
       image_url: ap.products?.image_url ?? null,
     })),
   }));
+}
+
+export interface HistoryRow {
+  id: string;
+  starts_at: string;
+  status: "confirmada" | "pendiente" | "completada" | "cancelada";
+  price: number;
+  client_name: string;
+  service_name: string;
+  service_color: string;
+}
+
+// History of ALL appointments (including cancelled) in a range.
+// Window is widened ±14h; the client component filters by local date.
+export async function getAppointmentsHistory(start: Date, end: Date): Promise<HistoryRow[]> {
+  const supabase = await createClient();
+  const from = new Date(startOfDay(start).getTime() - 14 * 3600_000);
+  const to = new Date(endOfDay(end).getTime() + 14 * 3600_000);
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("id, starts_at, status, price, clients(full_name), services(name, color)")
+    .gte("starts_at", from.toISOString())
+    .lte("starts_at", to.toISOString())
+    .order("starts_at", { ascending: false })
+    .limit(2000);
+
+  if (error || !data) return [];
+
+  return data.map((a) => {
+    const client = a.clients as unknown as { full_name: string } | null;
+    const service = a.services as unknown as { name: string; color: string } | null;
+    return {
+      id: a.id,
+      starts_at: a.starts_at,
+      status: a.status,
+      price: Number(a.price),
+      client_name: client?.full_name ?? "Cliente",
+      service_name: service?.name ?? "Servicio",
+      service_color: service?.color ?? "#999999",
+    };
+  });
 }
 
 // Returns raw ISO timestamps; the client component groups them by LOCAL date
