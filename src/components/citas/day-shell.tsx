@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { DayTimeline } from "./timeline";
 import { AppointmentWizard } from "./wizard";
+import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
 import type { AppointmentRow } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 import type { ServiceOption } from "./wizard";
@@ -27,6 +28,7 @@ export function DayCitasShell({
 
   return (
     <>
+      <RealtimeRefresher tables={["appointments"]} />
       <DayTimeline appointments={appointments} dayAvail={dayAvail} dateStr={dateStr} />
 
       <AppointmentWizard

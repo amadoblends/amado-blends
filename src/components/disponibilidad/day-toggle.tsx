@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toggleAvailabilityDay } from "@/lib/actions/availability";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,13 @@ export function DayToggle({ weekday, isActive }: { weekday: number; isActive: bo
   const router = useRouter();
   const [checked, setChecked] = useState(isActive);
   const [isPending, startTransition] = useTransition();
+
+  // Re-sync with the server value whenever it changes (router.refresh,
+  // realtime updates, another device) so the toggle never drifts.
+  useEffect(() => {
+    if (!isPending) setChecked(isActive);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]);
 
   function handleClick(e: React.MouseEvent) {
     e.preventDefault();

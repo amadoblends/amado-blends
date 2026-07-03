@@ -13,13 +13,19 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: appointment } = await supabase
-    .from("appointments")
-    .select(
-      "id, starts_at, ends_at, status, price, notes, clients(id, full_name, phone, avatar_url), services(name, color)"
-    )
-    .eq("id", id)
-    .single();
+  const [{ data: appointment }, { data: requestedProducts }] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select(
+        "id, starts_at, ends_at, status, price, notes, clients(id, full_name, phone, avatar_url), services(name, color)"
+      )
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("appointment_products")
+      .select("id, quantity, products(name, price, image_url)")
+      .eq("appointment_id", id),
+  ]);
 
   if (!appointment) notFound();
 
@@ -70,6 +76,36 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
           {appointment.notes && <Row label="Notas" value={appointment.notes} />}
         </dl>
       </div>
+
+      {requestedProducts && requestedProducts.length > 0 && (
+        <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
+          <p className="font-semibold text-foreground text-sm">
+            🛍️ Productos solicitados por el cliente
+          </p>
+          <div className="space-y-2">
+            {requestedProducts.map((rp) => {
+              const product = rp.products as unknown as {
+                name: string;
+                price: number;
+                image_url: string | null;
+              };
+              return (
+                <div key={rp.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-foreground font-medium">
+                    {rp.quantity}× {product.name}
+                  </span>
+                  <span className="text-muted">
+                    {formatCurrency(Number(product.price) * rp.quantity)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted pt-2 border-t border-border">
+            Prepara estos productos antes de la llegada del cliente. Se pagan en el local.
+          </p>
+        </div>
+      )}
 
       <AppointmentStatusActions appointmentId={appointment.id} currentStatus={appointment.status} />
     </div>

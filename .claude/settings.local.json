@@ -23,7 +23,8 @@
       "Bash(npx create-next-app@16.2.9 amadoblendsbooking --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --yes --no-turbopack)",
       "Read(//c/Users/Angel/OneDrive/Desktop/amadoblendsbooking/**)",
       "Bash(git commit -m 'Initial commit: Amado Blends client booking app *)",
-      "Bash(git commit -m 'Fix timezone day-boundary bugs + hide occupied slots in wizard *)"
+      "Bash(git commit -m 'Fix timezone day-boundary bugs + hide occupied slots in wizard *)",
+      "Bash(node scripts/gen-icons.js)"
     ]
   }
 }
