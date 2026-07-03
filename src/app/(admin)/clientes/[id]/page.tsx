@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Phone, MessageSquare, Pencil } from "lucide-react";
+import { Phone, MessageSquare, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Avatar } from "@/components/ui/avatar";
+import { BackButton } from "@/components/ui/back-button";
 import { Badge } from "@/components/ui/badge";
 import { ClientTabs } from "@/components/clientes/client-tabs";
 
@@ -47,9 +48,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   return (
     <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
       <header className="flex items-center justify-between">
-        <Link href="/clientes" className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">
-          <ChevronLeft size={20} />
-        </Link>
+        <BackButton />
         <Link href={`/clientes/${id}/editar`} className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">
           <Pencil size={18} />
         </Link>

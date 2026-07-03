@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ShoppingBag, Lock } from "lucide-react";
@@ -30,6 +31,38 @@ function fmtMins(mins: number) {
 function localDateStr(iso: string) {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Red line + circle showing the current time, moving down as the day advances
+function NowIndicator({ dayStart, dayEnd }: { dayStart: number; dayEnd: number }) {
+  const [nowMins, setNowMins] = useState<number | null>(null);
+
+  useEffect(() => {
+    const tick = () => {
+      const n = new Date();
+      setNowMins(n.getHours() * 60 + n.getMinutes());
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (nowMins === null || nowMins < dayStart || nowMins > dayEnd) return null;
+
+  const top = ((nowMins - dayStart) / 60) * HOUR_H;
+  return (
+    <div className="absolute left-0 right-0 z-10 pointer-events-none" style={{ top }}>
+      <div className="relative flex items-center">
+        <div className="absolute -left-[52px] min-w-[46px] h-[22px] px-1.5 rounded-full bg-danger flex items-center justify-center shadow">
+          <span className="text-white text-[9px] font-black leading-none">
+            {fmtMins(nowMins)}
+          </span>
+        </div>
+        <div className="w-2 h-2 rounded-full bg-danger -ml-1 shrink-0" />
+        <div className="flex-1 h-[2px] bg-danger" />
+      </div>
+    </div>
+  );
 }
 
 function initials(name: string) {
@@ -157,6 +190,11 @@ export function DayTimeline({
             >
               <span className="text-[9px] text-muted">Descanso</span>
             </div>
+          )}
+
+          {/* Current time indicator (only on today) */}
+          {dateStr === localDateStr(new Date().toISOString()) && (
+            <NowIndicator dayStart={dayStart} dayEnd={dayEnd} />
           )}
 
           {/* Blocked hours */}

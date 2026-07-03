@@ -19,6 +19,17 @@ export interface AppointmentRow {
   guests: string[]; // guest full names
 }
 
+// Appointments whose end time already passed get marked as completed
+// automatically, so day stats always reflect reality.
+export async function autoCompletePastAppointments(): Promise<void> {
+  const supabase = await createClient();
+  await supabase
+    .from("appointments")
+    .update({ status: "completada" })
+    .in("status", ["pendiente", "confirmada"])
+    .lt("ends_at", new Date().toISOString());
+}
+
 export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[]> {
   const supabase = await createClient();
   // Widen the window ±14h: the server runs in UTC but users live in another

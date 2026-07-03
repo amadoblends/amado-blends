@@ -3,11 +3,14 @@ import { startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, format } from "d
 import { es } from "date-fns/locale";
 
 export interface DashboardData {
-  todayRevenue: number;
+  todayRevenue: number; // projected: everything not cancelled
+  todayCompletedRevenue: number; // real: only completed
   yesterdayRevenue: number;
   todayAppointmentsCount: number;
+  todayCompletedCount: number;
   yesterdayAppointmentsCount: number;
   activeClientsToday: number;
+  busyMinutesToday: number;
   weekRevenue: { day: string; total: number }[];
   weekRevenueTotal: number;
   appointmentDistribution: { confirmada: number; pendiente: number; completada: number; total: number };
@@ -37,10 +40,13 @@ export interface DashboardData {
 
 const empty: DashboardData = {
   todayRevenue: 0,
+  todayCompletedRevenue: 0,
   yesterdayRevenue: 0,
   todayAppointmentsCount: 0,
+  todayCompletedCount: 0,
   yesterdayAppointmentsCount: 0,
   activeClientsToday: 0,
+  busyMinutesToday: 0,
   weekRevenue: [],
   weekRevenueTotal: 0,
   appointmentDistribution: { confirmada: 0, pendiente: 0, completada: 0, total: 0 },
@@ -62,7 +68,9 @@ export async function getDashboardData(): Promise<DashboardData> {
   const [todayApts, yesterdayApts, weekApts, productsRes] = await Promise.all([
     supabase
       .from("appointments")
-      .select("id, price, status, starts_at, client_id, clients(full_name, avatar_url), services(name)")
+      .select(
+        "id, price, status, starts_at, ends_at, client_id, clients(full_name, avatar_url), services(name)"
+      )
       .gte("starts_at", todayStart.toISOString())
       .lte("starts_at", todayEnd.toISOString()),
     supabase
@@ -90,9 +98,16 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const today = todayApts.data ?? [];
   const nonCancelledToday = today.filter((a) => a.status !== "cancelada");
+  const completedToday = today.filter((a) => a.status === "completada");
 
   const todayRevenue = nonCancelledToday.reduce((sum, a) => sum + Number(a.price), 0);
+  const todayCompletedRevenue = completedToday.reduce((sum, a) => sum + Number(a.price), 0);
   const yesterdayRevenue = (yesterdayApts.data ?? []).reduce((sum, a) => sum + Number(a.price), 0);
+  const busyMinutesToday = nonCancelledToday.reduce(
+    (sum, a) =>
+      sum + Math.round((new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000),
+    0
+  );
 
   const distribution = { confirmada: 0, pendiente: 0, completada: 0, total: 0 };
   for (const a of today) {
@@ -143,10 +158,13 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   return {
     todayRevenue,
+    todayCompletedRevenue,
     yesterdayRevenue,
-    todayAppointmentsCount: today.length,
+    todayAppointmentsCount: nonCancelledToday.length,
+    todayCompletedCount: completedToday.length,
     yesterdayAppointmentsCount: yesterdayApts.data?.length ?? 0,
-    activeClientsToday: new Set(today.map((a) => a.client_id)).size,
+    activeClientsToday: new Set(nonCancelledToday.map((a) => a.client_id)).size,
+    busyMinutesToday,
     weekRevenue,
     weekRevenueTotal,
     appointmentDistribution: distribution,

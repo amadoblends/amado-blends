@@ -11,6 +11,7 @@ import {
   CalendarClock,
   Bell,
   History,
+  BarChart3,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ const links = [
   { href: "/", label: "Inicio", icon: Home },
   { href: "/citas", label: "Citas", icon: Calendar },
   { href: "/historial", label: "Historial", icon: History },
+  { href: "/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/productos", label: "Productos", icon: Package },
   { href: "/servicios", label: "Servicios", icon: Scissors },

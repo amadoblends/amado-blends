@@ -112,7 +112,10 @@ export function ServicesManager({ services }: { services: ServiceData[] }) {
         </div>
       </section>
 
+      {/* key forces a fresh modal per service — otherwise the toggle/image
+          state of the previous service leaks into the next one */}
       <ServiceModal
+        key={editing?.id ?? `new-${createKind}-${modalOpen}`}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         service={editing}

@@ -13,10 +13,12 @@ import {
   CalendarClock,
   UserCircle,
   BadgePercent,
+  BarChart3,
 } from "lucide-react";
 
 const menu = [
   { href: "/perfil", label: "Mi perfil", icon: UserCircle },
+  { href: "/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/productos", label: "Productos e inventario", icon: Package },
   { href: "/servicios", label: "Servicios", icon: Scissors },
   { href: "/promociones", label: "Promociones", icon: BadgePercent },

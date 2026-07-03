@@ -27,7 +27,8 @@
       "Bash(node scripts/gen-icons.js)",
       "Bash(git commit --allow-empty -m 'Trigger Vercel deploy after restoring GitHub App access *)",
       "Bash(git commit -m 'Hide cancelled from timeline + Historial page with day/month/year filters *)",
-      "Bash(git commit -m 'Appointment detail timezone fix + full info, service redesign, promotions, client notifications *)"
+      "Bash(git commit -m 'Appointment detail timezone fix + full info, service redesign, promotions, client notifications *)",
+      "Bash(grep -rn 'href=\"/citas\"$\\\\|href=\"/clientes\"$\\\\|href=\"/mas\"$\\\\|href=\"/disponibilidad\"$\\\\|href=\"/servicios\"$\\\\|href=\"/\"$' src/app src/components --include=\"*.tsx\" -l)"
     ]
   }
 }

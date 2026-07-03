@@ -5,6 +5,7 @@ import {
   getAppointmentsForDay,
   getAppointmentStarts,
   getBlockedTimesForDay,
+  autoCompletePastAppointments,
 } from "@/lib/data/appointments";
 import { getAvailability, getBookingSettings } from "@/lib/data/availability";
 import { createClient } from "@/lib/supabase/server";
@@ -26,6 +27,9 @@ export default async function CitasPage({
   const weekEnd = addDays(weekStart, 5);
 
   const supabase = await createClient();
+
+  // Mark past appointments as completed before rendering
+  await autoCompletePastAppointments();
 
   const [
     appointments,

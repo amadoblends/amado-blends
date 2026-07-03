@@ -134,7 +134,12 @@ export function ProductsManager({ products }: { products: ProductData[] }) {
         )}
       </div>
 
-      <ProductModal open={modalOpen} onClose={() => setModalOpen(false)} product={editing} />
+      <ProductModal
+        key={editing?.id ?? `new-${modalOpen}`}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        product={editing}
+      />
     </div>
   );
 }

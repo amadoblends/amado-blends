@@ -1,15 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   addDays, subDays, addMonths, subMonths, addYears, subYears, format,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, CalendarX2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarX2, CalendarSearch } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/badge";
+import { HistoryCalendar } from "./history-calendar";
 import type { HistoryRow } from "@/lib/data/appointments";
 
 export type Period = "dia" | "mes" | "ano";
@@ -46,6 +47,7 @@ export function HistoryView({
 }) {
   const router = useRouter();
   const anchor = new Date(dateStr + "T00:00:00");
+  const [calOpen, setCalOpen] = useState(false);
 
   function go(nextPeriod: Period, nextDate: Date, nextStatus: string) {
     router.push(
@@ -127,7 +129,7 @@ export function HistoryView({
         ))}
       </div>
 
-      {/* Period navigation */}
+      {/* Period navigation — tap the date to open the full calendar */}
       <div className="flex items-center justify-between bg-surface rounded-xl border border-border px-2 py-2">
         <button
           onClick={() => shift(-1)}
@@ -135,7 +137,13 @@ export function HistoryView({
         >
           <ChevronLeft size={16} />
         </button>
-        <p className="font-semibold text-sm text-foreground capitalize">{periodLabel}</p>
+        <button
+          onClick={() => setCalOpen(true)}
+          className="flex items-center gap-1.5 font-semibold text-sm text-foreground capitalize active:opacity-70"
+        >
+          <CalendarSearch size={14} className="text-brand" />
+          {periodLabel}
+        </button>
         <button
           onClick={() => shift(1)}
           className="w-9 h-9 rounded-full border border-border flex items-center justify-center"
@@ -143,6 +151,13 @@ export function HistoryView({
           <ChevronRight size={16} />
         </button>
       </div>
+
+      <HistoryCalendar
+        open={calOpen}
+        onClose={() => setCalOpen(false)}
+        selectedDate={dateStr}
+        onPick={(picked) => go("dia", new Date(picked + "T00:00:00"), status)}
+      />
 
       {/* Summary */}
       <div className="grid grid-cols-4 gap-2">
