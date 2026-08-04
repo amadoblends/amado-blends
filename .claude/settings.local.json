@@ -52,7 +52,8 @@
       "Bash(sed -i 's|className=\"w-full bg-violet text-white font-semibold py-3 rounded-xl|className=\"w-full bg-brand text-white font-semibold py-3 rounded-xl|' src/components/clientes/client-form.tsx)",
       "Bash(sed -i 's|isSelected \\\\&\\\\& \"bg-violet text-white font-bold\",|isSelected \\\\&\\\\& \"bg-brand text-white font-bold\",|' src/components/citas/calendar-picker.tsx)",
       "Bash(sed -i 's|return generateSlots\\(dayAvail, service.duration_minutes, minNoticeMinutes, date, busy\\);|return generateSlots\\(dayAvail, service.duration_minutes, minNoticeMinutes, date, busy, slotOptions\\);|' src/components/booking/booking-wizard.tsx)",
-      "Bash(sed -i 's|return generateSlots\\(av, service.duration_minutes, minNoticeMinutes, ds, busy\\).length;|return generateSlots\\(av, service.duration_minutes, minNoticeMinutes, ds, busy, slotOptions\\).length;|' src/components/booking/booking-wizard.tsx)"
+      "Bash(sed -i 's|return generateSlots\\(av, service.duration_minutes, minNoticeMinutes, ds, busy\\).length;|return generateSlots\\(av, service.duration_minutes, minNoticeMinutes, ds, busy, slotOptions\\).length;|' src/components/booking/booking-wizard.tsx)",
+      "Bash(git commit -m 'Split no_show out of migration 17: status is an enum, not a check *)"
     ]
   }
 }

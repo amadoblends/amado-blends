@@ -59,17 +59,20 @@ export async function findClosureConflicts(
   const from = new Date(startsOn + "T00:00:00");
   const to = addDays(new Date(endsOn + "T00:00:00"), 1);
 
+  // Filtering "no_show" here would break before migration_18a adds it to the
+  // status enum, so only "cancelada" is excluded in SQL and the rest in JS.
   const { data } = await supabase
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, guest_name, clients(full_name), services(name)"
+      "id, starts_at, ends_at, status, guest_name, clients(full_name), services(name)"
     )
-    .not("status", "in", "(cancelada,no_show)")
+    .neq("status", "cancelada")
     .gte("starts_at", subDays(from, 1).toISOString())
     .lte("starts_at", addDays(to, 1).toISOString())
     .order("starts_at");
 
   const rows = (data ?? []).filter((a) => {
+    if (a.status === "no_show") return false;
     const start = new Date(a.starts_at);
     const dayKey = format(start, "yyyy-MM-dd");
     if (dayKey < startsOn || dayKey > endsOn) return false;
