@@ -1,34 +1,35 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
   Calendar, Users, Clock, DollarSign, GripVertical, AlertTriangle, Scissors,
+  Eye, EyeOff, Check, RotateCcw,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/badge";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { AppointmentsDonut } from "@/components/dashboard/appointments-donut";
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
+import { saveDashboardLayout } from "@/lib/actions/dashboard";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { DashboardData } from "@/lib/data/dashboard";
 
-const STORAGE_KEY = "dashboardOrder.v1";
-
-const WIDGET_KEYS = [
-  "resumen",
-  "proximas",
-  "ingresos",
-  "stats",
-  "grafica",
-  "distribucion",
-  "productos",
-  "alertas",
-  "acciones",
+const WIDGETS = [
+  { key: "resumen", label: "Resumen del día" },
+  { key: "proximas", label: "Próximas citas" },
+  { key: "ingresos", label: "Ingresos de hoy" },
+  { key: "stats", label: "Estadísticas rápidas" },
+  { key: "grafica", label: "Gráfica de ingresos" },
+  { key: "distribucion", label: "Distribución de citas" },
+  { key: "productos", label: "Productos" },
+  { key: "alertas", label: "Alertas de inventario" },
+  { key: "acciones", label: "Acciones rápidas" },
 ] as const;
 
-type WidgetKey = (typeof WIDGET_KEYS)[number];
+type WidgetKey = (typeof WIDGETS)[number]["key"];
+const ALL_KEYS = WIDGETS.map((w) => w.key) as WidgetKey[];
 
 function fmtBusy(mins: number) {
   const h = Math.floor(mins / 60);
@@ -37,33 +38,37 @@ function fmtBusy(mins: number) {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
-export function DashboardWidgets({ data }: { data: DashboardData }) {
-  const [order, setOrder] = useState<WidgetKey[]>([...WIDGET_KEYS]);
+export function DashboardWidgets({
+  data,
+  initialOrder,
+  initialHidden,
+  editing,
+  onEditingChange,
+}: {
+  data: DashboardData;
+  initialOrder: string[];
+  initialHidden: string[];
+  editing: boolean;
+  onEditingChange: (v: boolean) => void;
+}) {
+  // Saved order first, then any widget added since the layout was stored
+  const [order, setOrder] = useState<WidgetKey[]>(() => {
+    const valid = initialOrder.filter((k): k is WidgetKey => ALL_KEYS.includes(k as WidgetKey));
+    return [...valid, ...ALL_KEYS.filter((k) => !valid.includes(k))];
+  });
+  const [hidden, setHidden] = useState<Set<WidgetKey>>(
+    () => new Set(initialHidden.filter((k): k is WidgetKey => ALL_KEYS.includes(k as WidgetKey)))
+  );
   const [dragKey, setDragKey] = useState<WidgetKey | null>(null);
+  const [isPending, startTransition] = useTransition();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as WidgetKey[];
-        const valid = parsed.filter((k) => WIDGET_KEYS.includes(k));
-        const missing = WIDGET_KEYS.filter((k) => !valid.includes(k));
-        setOrder([...valid, ...missing]);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  function save(next: WidgetKey[]) {
-    setOrder(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore
-    }
-  }
+  // Persist whenever the layout settles (not on every drag frame)
+  const persist = (nextOrder: WidgetKey[], nextHidden: Set<WidgetKey>) => {
+    startTransition(async () => {
+      await saveDashboardLayout(nextOrder, [...nextHidden]);
+    });
+  };
 
   function handleDragMove(e: React.PointerEvent) {
     if (!dragKey || !containerRef.current) return;
@@ -88,13 +93,26 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
     setOrder(next);
   }
 
+  function toggleHidden(key: WidgetKey) {
+    const next = new Set(hidden);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setHidden(next);
+    persist(order, next);
+  }
+
+  function resetLayout() {
+    setOrder(ALL_KEYS);
+    setHidden(new Set());
+    persist(ALL_KEYS, new Set());
+  }
+
   const completionPct =
     data.todayAppointmentsCount > 0
       ? Math.round((data.todayCompletedCount / data.todayAppointmentsCount) * 100)
       : 0;
 
   const widgets: Record<WidgetKey, React.ReactNode> = {
-    // ── 1. Resumen del día: proyectado vs completado ──
     resumen: (
       <section className="bg-surface rounded-2xl border border-border p-4 space-y-3">
         <h2 className="font-bold text-foreground">Resumen del día</h2>
@@ -132,7 +150,6 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
       </section>
     ),
 
-    // ── 2. Próximas citas ──
     proximas: (
       <section className="bg-surface rounded-2xl border border-border p-4">
         <div className="flex items-center justify-between mb-3">
@@ -149,7 +166,7 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
               <li key={a.id}>
                 <Link href={`/citas/${a.id}`} className="flex items-center gap-3">
                   <span className="text-xs font-semibold text-muted w-14 shrink-0">{a.time}</span>
-                  <Avatar name={a.clientName} src={a.clientAvatar} size={36} />
+                  <Avatar name={a.clientName} src={a.clientAvatar} size={40} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-foreground truncate">
                       {a.clientName}
@@ -167,7 +184,6 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
       </section>
     ),
 
-    // ── 3. Ingresos de hoy ──
     ingresos: (
       <section className="bg-surface rounded-2xl border border-border p-4">
         <div className="flex items-center gap-3">
@@ -188,7 +204,6 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
       </section>
     ),
 
-    // ── 4. Quick stats: 3 iconos en un solo card ──
     stats: (
       <section className="bg-surface rounded-2xl border border-border p-4">
         <div className="grid grid-cols-3 divide-x divide-border">
@@ -214,7 +229,6 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
       </section>
     ),
 
-    // ── Gráfica semanal ──
     grafica: (
       <section className="bg-surface rounded-2xl border border-border p-4">
         <div className="flex items-center justify-between mb-1">
@@ -228,7 +242,6 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
       </section>
     ),
 
-    // ── Distribución ──
     distribucion: (
       <section className="bg-surface rounded-2xl border border-border p-4">
         <h2 className="font-bold text-foreground mb-2">Distribución de citas</h2>
@@ -256,7 +269,6 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
       </section>
     ),
 
-    // ── Productos ──
     productos: (
       <section className="bg-surface rounded-2xl border border-border p-4">
         <div className="flex items-center justify-between mb-3">
@@ -289,7 +301,6 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
       </section>
     ),
 
-    // ── Alertas de inventario ──
     alertas: (
       <section className="bg-surface rounded-2xl border border-border p-4">
         <div className="flex items-center justify-between mb-3">
@@ -335,7 +346,6 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
       </section>
     ),
 
-    // ── Acciones rápidas ──
     acciones: (
       <section className="bg-surface rounded-2xl border border-border p-4">
         <h2 className="font-bold text-foreground mb-3">Acciones rápidas</h2>
@@ -349,6 +359,9 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
     ),
   };
 
+  const visible = order.filter((k) => !hidden.has(k));
+  const hiddenList = order.filter((k) => hidden.has(k));
+
   return (
     <div
       ref={containerRef}
@@ -356,13 +369,35 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
       onPointerMove={handleDragMove}
       onPointerUp={() => {
         if (dragKey) {
-          save(order);
+          persist(order, hidden);
           setDragKey(null);
         }
       }}
     >
       <RealtimeRefresher tables={["appointments", "products"]} />
-      {order.map((key) => (
+
+      {editing && (
+        <div className="bg-brand-light rounded-2xl border border-brand/25 p-3 flex items-center gap-2">
+          <p className="text-xs text-brand flex-1">
+            Arrastra ⋮⋮ para reordenar y usa el ojo para ocultar tarjetas.
+            {isPending && " Guardando..."}
+          </p>
+          <button
+            onClick={resetLayout}
+            className="flex items-center gap-1 text-[11px] font-semibold text-brand px-2 py-1 rounded-lg border border-brand/30"
+          >
+            <RotateCcw size={11} /> Restablecer
+          </button>
+          <button
+            onClick={() => onEditingChange(false)}
+            className="flex items-center gap-1 text-[11px] font-bold text-white bg-brand px-3 py-1.5 rounded-lg"
+          >
+            <Check size={12} /> Listo
+          </button>
+        </div>
+      )}
+
+      {visible.map((key) => (
         <div
           key={key}
           data-widget={key}
@@ -371,24 +406,54 @@ export function DashboardWidgets({ data }: { data: DashboardData }) {
             dragKey === key && "opacity-60 scale-[0.99]"
           )}
         >
-          {/* Drag handle — hold and move to reorder */}
-          <button
-            onPointerDown={(e) => {
-              e.preventDefault();
-              (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-              setDragKey(key);
-            }}
-            className="absolute top-3 right-3 z-10 w-7 h-7 rounded-lg flex items-center justify-center text-muted/40 active:text-brand touch-none cursor-grab active:cursor-grabbing"
-            aria-label="Mover widget"
-          >
-            <GripVertical size={15} />
-          </button>
+          {editing && (
+            <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1">
+              <button
+                onClick={() => toggleHidden(key)}
+                aria-label="Ocultar widget"
+                title="Ocultar"
+                className="w-8 h-8 rounded-lg bg-background border border-border flex items-center justify-center text-muted active:text-danger"
+              >
+                <EyeOff size={14} />
+              </button>
+              <button
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+                  setDragKey(key);
+                }}
+                aria-label="Mover widget"
+                title="Arrastrar para reordenar"
+                className="w-8 h-8 rounded-lg bg-background border border-border flex items-center justify-center text-muted touch-none cursor-grab active:cursor-grabbing active:text-brand"
+              >
+                <GripVertical size={14} />
+              </button>
+            </div>
+          )}
           {widgets[key]}
         </div>
       ))}
-      <p className="text-[10px] text-muted/60 text-center">
-        Arrastra el icono ⋮⋮ de cada tarjeta para reordenar tu dashboard
-      </p>
+
+      {/* Hidden widgets can be brought back from here */}
+      {editing && hiddenList.length > 0 && (
+        <div className="bg-surface rounded-2xl border border-dashed border-border p-4 space-y-2">
+          <p className="text-xs font-bold text-muted uppercase tracking-wide">
+            Widgets ocultos ({hiddenList.length})
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {hiddenList.map((key) => (
+              <button
+                key={key}
+                onClick={() => toggleHidden(key)}
+                className="flex items-center gap-1.5 px-3 h-9 rounded-xl border border-border bg-background text-xs font-semibold text-foreground active:border-brand"
+              >
+                <Eye size={12} className="text-brand" />
+                {WIDGETS.find((w) => w.key === key)?.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

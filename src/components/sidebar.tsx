@@ -14,6 +14,7 @@ import {
   History,
   BarChart3,
   BadgePercent,
+  Images,
   LogOut,
   Search,
   PanelLeftClose,
@@ -32,6 +33,7 @@ const links = [
   { href: "/productos", label: "Productos", icon: Package },
   { href: "/servicios", label: "Servicios", icon: Scissors },
   { href: "/promociones", label: "Promociones", icon: BadgePercent },
+  { href: "/carrusel", label: "Carrusel", icon: Images },
   { href: "/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
   { href: "/notificaciones", label: "Notificaciones", icon: Bell },
 ];

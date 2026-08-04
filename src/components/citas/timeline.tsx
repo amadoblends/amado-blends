@@ -6,10 +6,12 @@ import Image from "next/image";
 import { ShoppingBag, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { displayAppointmentName } from "@/lib/guests";
+import { PhotoLightbox } from "@/components/ui/photo-lightbox";
 import type { AppointmentRow, BlockedRange } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 
-const HOUR_H = 80;
+// Taller rows so a 30-minute block still fits an avatar plus two lines
+const HOUR_H = 96;
 
 function toMins(t: string) {
   const [h, m] = t.split(":").map(Number);
@@ -79,32 +81,54 @@ function InitialsCircle({
   avatarUrl,
   color,
   size = 22,
+  onExpand,
 }: {
   name: string;
   avatarUrl?: string | null;
   color: string;
   size?: number;
+  onExpand?: () => void;
 }) {
-  if (avatarUrl) {
+  const inner = avatarUrl ? (
+    <Image src={avatarUrl} alt={name} fill className="object-cover" sizes="48px" />
+  ) : (
+    <span className="text-white font-bold" style={{ fontSize: size * 0.4 }}>
+      {initials(name)}
+    </span>
+  );
+
+  const classes = cn(
+    "rounded-full overflow-hidden shrink-0 relative flex items-center justify-center",
+    "ring-2 ring-white/70 shadow-sm",
+    onExpand && "active:scale-95 transition-transform"
+  );
+
+  // Tapping the photo opens it large without following the block's link
+  if (onExpand) {
     return (
-      <div
-        className="rounded-full overflow-hidden border border-white/40 shrink-0 relative"
-        style={{ width: size, height: size }}
-        title={name}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onExpand();
+        }}
+        aria-label={`Ver foto de ${name}`}
+        className={classes}
+        style={{ width: size, height: size, background: avatarUrl ? undefined : color }}
       >
-        <Image src={avatarUrl} alt={name} fill className="object-cover" />
-      </div>
+        {inner}
+      </button>
     );
   }
+
   return (
     <div
-      className="rounded-full flex items-center justify-center shrink-0 border border-white/40"
-      style={{ width: size, height: size, background: color }}
+      className={classes}
+      style={{ width: size, height: size, background: avatarUrl ? undefined : color }}
       title={name}
     >
-      <span className="text-white font-bold" style={{ fontSize: size * 0.38 }}>
-        {initials(name)}
-      </span>
+      {inner}
     </div>
   );
 }
@@ -120,6 +144,8 @@ export function DayTimeline({
   dateStr: string;
   blockedTimes?: BlockedRange[];
 }) {
+  const [photo, setPhoto] = useState<{ src: string | null; name: string } | null>(null);
+  const onPhotoClick = (src: string | null, name: string) => setPhoto({ src, name });
   // Server fetches a widened window (UTC vs local timezone); keep only
   // appointments that fall on the selected local day.
   const appointments = allAppointments.filter((a) => localDateStr(a.starts_at) === dateStr);
@@ -223,8 +249,8 @@ export function DayTimeline({
               (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000;
             const top = ((sMins - dayStart) / 60) * HOUR_H;
             // 3px gap keeps back-to-back appointments visually separate
-            const height = Math.max((durMins / 60) * HOUR_H - 3, 28);
-            const compact = height < 46;
+            const height = Math.max((durMins / 60) * HOUR_H - 3, 34);
+            const compact = height < 56;
 
             return (
               <Link
@@ -238,34 +264,46 @@ export function DayTimeline({
                   boxShadow: `inset 3px 0 0 ${a.service.color}`,
                 }}
               >
-                <p
-                  className="text-[10px] font-bold leading-tight"
-                  style={{ color: a.service.color }}
-                >
-                  {fmtMins(sMins)} – {fmtMins(sMins + durMins)}
-                </p>
-                <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0 h-full">
                   <InitialsCircle
                     name={a.guest_name ?? a.client.full_name}
                     avatarUrl={a.guest_name ? null : a.client.avatar_url}
                     color={a.service.color}
-                    size={compact ? 16 : 20}
+                    size={compact ? 28 : 40}
+                    onExpand={() =>
+                      onPhotoClick?.(
+                        a.guest_name ? null : a.client.avatar_url,
+                        a.guest_name ?? a.client.full_name
+                      )
+                    }
                   />
-                  <p className="text-xs font-semibold text-foreground truncate leading-tight flex-1">
-                    {displayAppointmentName(
-                      a.client.full_name,
-                      a.guest_name,
-                      a.guest_relationship
+
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-[11px] font-bold leading-tight"
+                      style={{ color: a.service.color }}
+                    >
+                      {fmtMins(sMins)} – {fmtMins(sMins + durMins)}
+                    </p>
+                    <p className="text-sm font-bold text-foreground truncate leading-tight">
+                      {displayAppointmentName(
+                        a.client.full_name,
+                        a.guest_name,
+                        a.guest_relationship
+                      )}
+                    </p>
+                    {!compact && (
+                      <p className="text-xs font-medium text-muted truncate leading-tight">
+                        {a.service.name}
+                      </p>
                     )}
-                  </p>
-                  {/* One small circle per guest */}
+                  </div>
+
+                  {/* One small circle per guest attached to this appointment */}
                   {a.guests.slice(0, 3).map((g, i) => (
-                    <InitialsCircle key={i} name={g} color={a.service.color} size={16} />
+                    <InitialsCircle key={i} name={g} color={a.service.color} size={20} />
                   ))}
                 </div>
-                {height > 52 && (
-                  <p className="text-[10px] text-muted truncate leading-tight">{a.service.name}</p>
-                )}
                 {/* Product thumbnails: know what to prepare at a glance */}
                 {a.products.length > 0 && height > 72 && (
                   <div className="flex items-center gap-1 mt-1">
@@ -298,6 +336,13 @@ export function DayTimeline({
           })}
         </div>
       </div>
+
+      <PhotoLightbox
+        open={photo !== null}
+        onClose={() => setPhoto(null)}
+        src={photo?.src ?? null}
+        name={photo?.name ?? ""}
+      />
     </div>
   );
 }

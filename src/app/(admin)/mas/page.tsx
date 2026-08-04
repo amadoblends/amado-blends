@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Package,
   Scissors,
-  Bell,
+  Images,
   LogOut,
   ChevronRight,
   ShieldCheck,
@@ -22,8 +22,8 @@ const menu = [
   { href: "/productos", label: "Productos e inventario", icon: Package },
   { href: "/servicios", label: "Servicios", icon: Scissors },
   { href: "/promociones", label: "Promociones", icon: BadgePercent },
+  { href: "/carrusel", label: "Carrusel del cliente", icon: Images },
   { href: "/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
-  { href: "/notificaciones", label: "Notificaciones", icon: Bell },
 ];
 
 export default async function MorePage() {

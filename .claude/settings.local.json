@@ -34,7 +34,15 @@
       "Bash(sed -i '/const \\\\[guestPrompt, setGuestPrompt\\\\]/d' src/components/booking/booking-flow.tsx)",
       "Bash(sed -i '/setGuestPrompt\\(\"ask\"\\);/d' src/components/booking/booking-flow.tsx)",
       "Bash(sed -i '/\\\\/\\\\/ Success step: guest flow/d' src/components/booking/booking-flow.tsx)",
-      "Bash(git commit -m 'OTP signup, session re-verification, editable profile, service products, guest bookings *)"
+      "Bash(git commit -m 'OTP signup, session re-verification, editable profile, service products, guest bookings *)",
+      "Bash(grep -n 'Hero banner\\\\|TU MEJOR\\\\|heroLine\\\\|Reservar cita\\\\|</Link>\\\\|Scissors$\\\\|const \\\\[{ data: nextApt' src/app/\\\\\\(app\\\\\\)/page.tsx)",
+      "Bash(sed -i 's/import { Home, Calendar, Plus, ShoppingBag, User } from \"lucide-react\";/import { Home, Calendar, CalendarPlus, ShoppingBag, User } from \"lucide-react\";/' src/components/ui/side-nav.tsx)",
+      "Bash(sed -i 's/<Plus size={17} \\\\/> Reservar cita/<CalendarPlus size={17} \\\\/> Reservar cita/' src/components/ui/side-nav.tsx)",
+      "Bash(sed -i 's/^  const path = usePathname\\(\\);$/  const path = usePathname\\(\\);\\\\n  const { t } = useT\\(\\);/' src/components/ui/side-nav.tsx)",
+      "Bash(sed -i 's|<CalendarPlus size={17} /> Reservar cita|<CalendarPlus size={17} /> {t\\(\"nav.book\"\\)}|' src/components/ui/side-nav.tsx)",
+      "Bash(sed -i 's|^              {item.label}$|              {t\\(item.key\\)}|' src/components/ui/side-nav.tsx)",
+      "Bash(python3 -)",
+      "Bash(git commit -m 'Readable appointment blocks, editable dashboard, real client segments, carousel admin *)"
     ]
   }
 }
