@@ -54,13 +54,11 @@ function NowIndicator({ dayStart, dayEnd }: { dayStart: number; dayEnd: number }
   return (
     <div className="absolute left-0 right-0 z-10 pointer-events-none" style={{ top }}>
       <div className="relative flex items-center">
-        <div className="absolute -left-[52px] min-w-[46px] h-[22px] px-1.5 rounded-full bg-danger flex items-center justify-center shadow">
-          <span className="text-white text-[9px] font-black leading-none">
-            {fmtMins(nowMins)}
-          </span>
+        <div className="absolute -left-[48px] min-w-[44px] h-[20px] px-1.5 rounded-full bg-danger flex items-center justify-center shadow-sm">
+          <span className="text-white text-[9px] font-black leading-none">{fmtMins(nowMins)}</span>
         </div>
-        <div className="w-2 h-2 rounded-full bg-danger -ml-1 shrink-0" />
-        <div className="flex-1 h-[2px] bg-danger" />
+        <div className="w-1.5 h-1.5 rounded-full bg-danger shrink-0" />
+        <div className="flex-1 h-[1.5px] bg-danger" />
       </div>
     </div>
   );
@@ -129,8 +127,8 @@ export function DayTimeline({
 
   if (!dayAvail?.is_active) {
     return (
-      <div className="bg-surface rounded-2xl border border-border p-8 text-center">
-        <p className="text-sm text-muted">Día no laborable. Cambia tu disponibilidad en Ajustes.</p>
+      <div className="py-12 text-center">
+        <p className="text-sm text-muted">Día no laborable. Cámbialo en Disponibilidad.</p>
       </div>
     );
   }
@@ -141,40 +139,36 @@ export function DayTimeline({
   const breakEnd = dayAvail.break_end_time ? toMins(dayAvail.break_end_time) : null;
   const totalH = ((dayEnd - dayStart) / 60) * HOUR_H;
 
-  const ticks: number[] = [];
-  for (let t = dayStart; t <= dayEnd; t += 30) ticks.push(t);
+  // Hour lines only — half-hour ticks made the grid noisy on small screens
+  const hours: number[] = [];
+  for (let t = Math.ceil(dayStart / 60) * 60; t <= dayEnd; t += 60) hours.push(t);
 
   return (
-    <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+    <div>
       {appointments.length === 0 && (
-        <p className="text-xs text-muted text-center pt-3">Sin citas — toca + para crear</p>
+        <p className="text-xs text-muted text-center pb-3">Sin citas — toca + para crear</p>
       )}
-      <div className="relative flex pt-2 pb-4">
-        {/* Hour labels */}
-        <div className="w-14 shrink-0 relative" style={{ height: totalH + 8 }}>
-          {ticks
-            .filter((t) => t % 60 === 0)
-            .map((t) => (
-              <div
-                key={t}
-                className="absolute right-2 text-[10px] text-muted leading-none"
-                style={{ top: ((t - dayStart) / 60) * HOUR_H }}
-              >
-                {fmtMins(t).replace(":00", "")}
-              </div>
-            ))}
+      <div className="relative flex">
+        {/* Hour labels — sit slightly above their line so they read as headers */}
+        <div className="w-12 shrink-0 relative" style={{ height: totalH + 12 }}>
+          {hours.map((t) => (
+            <div
+              key={t}
+              className="absolute right-2.5 text-[10px] font-medium text-muted leading-none"
+              style={{ top: ((t - dayStart) / 60) * HOUR_H - 4 }}
+            >
+              {fmtMins(t).replace(":00", "")}
+            </div>
+          ))}
         </div>
 
         {/* Grid + blocks */}
-        <div className="flex-1 relative border-l border-border" style={{ height: totalH + 8 }}>
-          {/* Grid lines */}
-          {ticks.map((t) => (
+        <div className="flex-1 relative min-w-0" style={{ height: totalH + 12 }}>
+          {/* Hairline per hour, no vertical rule or outer frame */}
+          {hours.map((t) => (
             <div
               key={t}
-              className={cn(
-                "absolute left-0 right-0 border-t",
-                t % 60 === 0 ? "border-border" : "border-border/30"
-              )}
+              className="absolute left-0 right-0 h-px bg-border"
               style={{ top: ((t - dayStart) / 60) * HOUR_H }}
             />
           ))}
@@ -182,14 +176,14 @@ export function DayTimeline({
           {/* Break shading */}
           {breakStart !== null && breakEnd !== null && (
             <div
-              className="absolute left-1 right-1 rounded flex items-center justify-center"
+              className="absolute left-0 right-0 rounded-xl flex items-center justify-center"
               style={{
                 top: ((breakStart - dayStart) / 60) * HOUR_H,
                 height: ((breakEnd - breakStart) / 60) * HOUR_H,
-                background: "color-mix(in srgb, var(--color-muted) 8%, transparent)",
+                background: "color-mix(in srgb, var(--color-muted) 7%, transparent)",
               }}
             >
-              <span className="text-[9px] text-muted">Descanso</span>
+              <span className="text-[9px] font-medium text-muted">Descanso</span>
             </div>
           )}
 
@@ -208,7 +202,7 @@ export function DayTimeline({
             return (
               <div
                 key={b.id}
-                className="absolute left-1 right-1 rounded-lg flex items-center justify-center gap-1 border border-dashed border-border"
+                className="absolute left-0 right-0 rounded-xl flex items-center justify-center gap-1"
                 style={{
                   top,
                   height,
@@ -228,18 +222,20 @@ export function DayTimeline({
             const durMins =
               (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000;
             const top = ((sMins - dayStart) / 60) * HOUR_H;
-            const height = Math.max((durMins / 60) * HOUR_H - 2, 26);
+            // 3px gap keeps back-to-back appointments visually separate
+            const height = Math.max((durMins / 60) * HOUR_H - 3, 28);
+            const compact = height < 46;
 
             return (
               <Link
                 key={a.id}
                 href={`/citas/${a.id}`}
-                className="absolute left-1 right-1 rounded-xl px-2.5 py-1.5 overflow-hidden active:opacity-75"
+                className="absolute left-0 right-0 rounded-xl px-3 py-1.5 overflow-hidden active:opacity-75 transition-opacity"
                 style={{
                   top,
                   height,
-                  background: `${a.service.color}22`,
-                  borderLeft: `3px solid ${a.service.color}`,
+                  background: `color-mix(in srgb, ${a.service.color} 16%, var(--surface))`,
+                  boxShadow: `inset 3px 0 0 ${a.service.color}`,
                 }}
               >
                 <p
@@ -253,6 +249,7 @@ export function DayTimeline({
                     name={a.guest_name ?? a.client.full_name}
                     avatarUrl={a.guest_name ? null : a.client.avatar_url}
                     color={a.service.color}
+                    size={compact ? 16 : 20}
                   />
                   <p className="text-xs font-semibold text-foreground truncate leading-tight flex-1">
                     {displayAppointmentName(
@@ -263,14 +260,14 @@ export function DayTimeline({
                   </p>
                   {/* One small circle per guest */}
                   {a.guests.slice(0, 3).map((g, i) => (
-                    <InitialsCircle key={i} name={g} color={a.service.color} size={18} />
+                    <InitialsCircle key={i} name={g} color={a.service.color} size={16} />
                   ))}
                 </div>
-                {height > 46 && (
+                {height > 52 && (
                   <p className="text-[10px] text-muted truncate leading-tight">{a.service.name}</p>
                 )}
                 {/* Product thumbnails: know what to prepare at a glance */}
-                {a.products.length > 0 && height > 64 && (
+                {a.products.length > 0 && height > 72 && (
                   <div className="flex items-center gap-1 mt-1">
                     {a.products.slice(0, 4).map((p, i) =>
                       p.image_url ? (
