@@ -16,7 +16,9 @@ export interface AppointmentRow {
   client: { id: string; full_name: string; avatar_url: string | null };
   service: { id: string; name: string; color: string };
   products: AppointmentProduct[];
-  guests: string[]; // guest full names
+  guests: string[]; // legacy guests attached to this appointment
+  guest_name: string | null; // set when the booking is for someone else
+  guest_relationship: string | null;
 }
 
 // Appointments whose end time already passed get marked as completed
@@ -40,7 +42,7 @@ export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[
   const { data, error } = await supabase
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, status, price, clients(id, full_name, avatar_url), services(id, name, color), appointment_products(quantity, products(name, image_url)), appointment_guests(full_name)"
+      "id, starts_at, ends_at, status, price, guest_name, guest_relationship, clients(id, full_name, avatar_url), services(id, name, color), appointment_products(quantity, products(name, image_url)), appointment_guests(full_name)"
     )
     .gte("starts_at", from.toISOString())
     .lte("starts_at", to.toISOString())
@@ -68,6 +70,8 @@ export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[
     guests: ((a.appointment_guests as unknown as { full_name: string }[]) ?? []).map(
       (g) => g.full_name
     ),
+    guest_name: a.guest_name ?? null,
+    guest_relationship: a.guest_relationship ?? null,
   }));
 }
 

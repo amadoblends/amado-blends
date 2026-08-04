@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ShoppingBag, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { displayAppointmentName } from "@/lib/guests";
 import type { AppointmentRow, BlockedRange } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 
@@ -249,12 +250,16 @@ export function DayTimeline({
                 </p>
                 <div className="flex items-center gap-1.5 min-w-0">
                   <InitialsCircle
-                    name={a.client.full_name}
-                    avatarUrl={a.client.avatar_url}
+                    name={a.guest_name ?? a.client.full_name}
+                    avatarUrl={a.guest_name ? null : a.client.avatar_url}
                     color={a.service.color}
                   />
                   <p className="text-xs font-semibold text-foreground truncate leading-tight flex-1">
-                    {a.client.full_name}
+                    {displayAppointmentName(
+                      a.client.full_name,
+                      a.guest_name,
+                      a.guest_relationship
+                    )}
                   </p>
                   {/* One small circle per guest */}
                   {a.guests.slice(0, 3).map((g, i) => (

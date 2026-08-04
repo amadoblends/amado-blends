@@ -3,7 +3,9 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { AlertTriangle, ChevronLeft, Plus, Package, DollarSign, PackageX } from "lucide-react";
+import {
+  AlertTriangle, ChevronLeft, Plus, Package, DollarSign, PackageX, EyeOff,
+} from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { ProductModal, type ProductData } from "@/components/productos/product-modal";
 
@@ -119,6 +121,23 @@ export function ProductsManager({ products }: { products: ProductData[] }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
                   <p className="text-xs text-muted">{p.stock} en stock</p>
+                  <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                    {p.category && (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-brand bg-brand-light px-1.5 py-0.5 rounded-full uppercase">
+                        {p.category === "dry" ? "Seco" : "Húmedo"}
+                      </span>
+                    )}
+                    {p.is_visible_for_sale === false && (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-muted bg-background border border-border px-1.5 py-0.5 rounded-full">
+                        <EyeOff size={8} /> Sin venta
+                      </span>
+                    )}
+                    {p.available_for_services === false && (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-muted bg-background border border-border px-1.5 py-0.5 rounded-full">
+                        No en servicios
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-foreground">{formatCurrency(Number(p.price))}</p>

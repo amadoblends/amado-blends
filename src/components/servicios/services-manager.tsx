@@ -5,9 +5,19 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, Plus, Package, Scissors, EyeOff, BadgePercent } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { ServiceModal, type ServiceData } from "@/components/servicios/service-modal";
+import {
+  ServiceModal,
+  type ServiceData,
+  type ProductOption,
+} from "@/components/servicios/service-modal";
 
-export function ServicesManager({ services }: { services: ServiceData[] }) {
+export function ServicesManager({
+  services,
+  products = [],
+}: {
+  services: ServiceData[];
+  products?: ProductOption[];
+}) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ServiceData | null>(null);
   const [createKind, setCreateKind] = useState<"single" | "package">("single");
@@ -121,6 +131,7 @@ export function ServicesManager({ services }: { services: ServiceData[] }) {
         service={editing}
         initialKind={createKind}
         availableServices={singleOptions}
+        availableProducts={products}
       />
     </div>
   );

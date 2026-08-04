@@ -2,11 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Wind, Droplet } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { ImageUploader } from "@/components/ui/image-uploader";
 import { upsertService, deleteService } from "@/lib/actions/products";
+import { cn } from "@/lib/utils";
 import type { ServiceKind } from "@/lib/supabase/types";
+
+export interface ProductOption {
+  id: string;
+  name: string;
+  category: "dry" | "wet" | null;
+}
 
 export interface ServiceData {
   id: string;
@@ -19,6 +27,7 @@ export interface ServiceData {
   description?: string | null;
   is_public?: boolean;
   package_item_ids?: string[];
+  product_ids?: string[];
 }
 
 // Colors are assigned automatically from this palette (no manual picker)
@@ -39,12 +48,14 @@ export function ServiceModal({
   service,
   initialKind = "single",
   availableServices,
+  availableProducts = [],
 }: {
   open: boolean;
   onClose: () => void;
   service: ServiceData | null;
   initialKind?: ServiceKind;
   availableServices: { id: string; name: string }[];
+  availableProducts?: ProductOption[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -54,8 +65,23 @@ export function ServiceModal({
   const [selectedItems, setSelectedItems] = useState<Set<string>>(
     new Set(service?.package_item_ids ?? [])
   );
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(
+    new Set(service?.product_ids ?? [])
+  );
 
   const kind: ServiceKind = service?.kind ?? initialKind;
+  const dryProducts = availableProducts.filter((p) => p.category === "dry");
+  const wetProducts = availableProducts.filter((p) => p.category === "wet");
+  const otherProducts = availableProducts.filter((p) => !p.category);
+
+  function toggleProduct(id: string) {
+    setSelectedProducts((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -65,6 +91,8 @@ export function ServiceModal({
     formData.set("isPublic", String(isPublic));
     // Keep the existing color when editing; auto-assign for new services
     formData.set("color", service?.color ?? autoColor(name));
+    formData.delete("serviceProducts");
+    for (const productId of selectedProducts) formData.append("serviceProducts", productId);
 
     startTransition(async () => {
       const result = await upsertService(service?.id ?? null, formData);
@@ -161,6 +189,46 @@ export function ServiceModal({
           </div>
         )}
 
+        {/* Products the client can request for this service */}
+        {availableProducts.length > 0 && (
+          <div>
+            <label className="text-sm font-medium text-foreground mb-1 block">
+              Productos disponibles para este servicio
+            </label>
+            <p className="text-xs text-muted mb-2">
+              El cliente podrá elegir cuáles quiere que uses durante su cita.
+            </p>
+            <div className="space-y-3 max-h-56 overflow-y-auto border border-border rounded-xl p-3">
+              <ProductGroup
+                title="Secos"
+                icon={<Wind size={12} />}
+                products={dryProducts}
+                selected={selectedProducts}
+                onToggle={toggleProduct}
+              />
+              <ProductGroup
+                title="Húmedos"
+                icon={<Droplet size={12} />}
+                products={wetProducts}
+                selected={selectedProducts}
+                onToggle={toggleProduct}
+              />
+              <ProductGroup
+                title="Sin categoría"
+                products={otherProducts}
+                selected={selectedProducts}
+                onToggle={toggleProduct}
+              />
+            </div>
+            {selectedProducts.size > 0 && (
+              <p className="text-xs text-brand font-semibold mt-1.5">
+                {selectedProducts.size} producto{selectedProducts.size > 1 ? "s" : ""} seleccionado
+                {selectedProducts.size > 1 ? "s" : ""}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Public visibility toggle */}
         <div className="flex items-center justify-between gap-3 bg-background rounded-xl border border-border px-4 py-3">
           <div className="min-w-0">
@@ -210,6 +278,50 @@ export function ServiceModal({
         `}</style>
       </form>
     </Modal>
+  );
+}
+
+function ProductGroup({
+  title,
+  icon,
+  products,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  products: ProductOption[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  if (products.length === 0) return null;
+  return (
+    <div>
+      <p className="text-[10px] font-bold text-muted uppercase tracking-wide mb-1 flex items-center gap-1">
+        {icon}
+        {title}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {products.map((p) => {
+          const active = selected.has(p.id);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onToggle(p.id)}
+              className={cn(
+                "px-2.5 h-8 rounded-full text-xs font-semibold border transition-colors",
+                active
+                  ? "bg-brand border-brand text-white"
+                  : "border-border bg-background text-foreground"
+              )}
+            >
+              {p.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

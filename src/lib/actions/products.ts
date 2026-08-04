@@ -12,6 +12,9 @@ const productSchema = z.object({
   lowStockThreshold: z.coerce.number().int().min(0).max(100000),
   criticalStockThreshold: z.coerce.number().int().min(0).max(100000),
   imageUrl: z.string().url().max(2000).optional().or(z.literal("")),
+  category: z.enum(["dry", "wet"]).optional().or(z.literal("")),
+  visibleForSale: z.enum(["true", "false"]).default("true"),
+  availableForServices: z.enum(["true", "false"]).default("true"),
 });
 
 export async function upsertProduct(productId: string | null, formData: FormData): Promise<ActionResult> {
@@ -26,6 +29,9 @@ export async function upsertProduct(productId: string | null, formData: FormData
     lowStockThreshold: formData.get("lowStockThreshold"),
     criticalStockThreshold: formData.get("criticalStockThreshold"),
     imageUrl: formData.get("imageUrl") || "",
+    category: formData.get("category") || "",
+    visibleForSale: formData.get("visibleForSale") || "true",
+    availableForServices: formData.get("availableForServices") || "true",
   });
 
   if (!parsed.success) return { ok: false, error: "Revisa los datos del producto." };
@@ -37,6 +43,9 @@ export async function upsertProduct(productId: string | null, formData: FormData
     low_stock_threshold: parsed.data.lowStockThreshold,
     critical_stock_threshold: parsed.data.criticalStockThreshold,
     image_url: parsed.data.imageUrl || null,
+    category: parsed.data.category || null,
+    is_visible_for_sale: parsed.data.visibleForSale === "true",
+    available_for_services: parsed.data.availableForServices === "true",
   };
 
   const query = productId
@@ -131,6 +140,19 @@ export async function upsertService(serviceId: string | null, formData: FormData
     const rows = packageItemIds.map((itemId) => ({ package_id: id, item_service_id: itemId }));
     const { error: itemsError } = await supabase.from("service_package_items").insert(rows);
     if (itemsError) return { ok: false, error: "No se pudieron guardar los servicios del paquete." };
+  }
+
+  // Products the client can request for this service
+  const productIds = formData
+    .getAll("serviceProducts")
+    .map(String)
+    .filter((pid) => z.string().uuid().safeParse(pid).success);
+
+  await supabase.from("service_products").delete().eq("service_id", id);
+  if (productIds.length > 0) {
+    const rows = productIds.map((productId) => ({ service_id: id, product_id: productId }));
+    const { error: prodError } = await supabase.from("service_products").insert(rows);
+    if (prodError) return { ok: false, error: "No se pudieron guardar los productos del servicio." };
   }
 
   revalidatePath("/servicios");

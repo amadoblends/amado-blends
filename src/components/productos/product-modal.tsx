@@ -2,9 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Droplet, Wind, Store, Scissors } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { Switch } from "@/components/ui/switch";
 import { ImageUploader } from "@/components/ui/image-uploader";
 import { upsertProduct, deleteProduct } from "@/lib/actions/products";
+import { cn } from "@/lib/utils";
+
+export type ProductCategory = "dry" | "wet" | null;
 
 export interface ProductData {
   id: string;
@@ -14,6 +19,9 @@ export interface ProductData {
   low_stock_threshold: number;
   critical_stock_threshold: number;
   image_url: string | null;
+  category?: ProductCategory;
+  is_visible_for_sale?: boolean;
+  available_for_services?: boolean;
 }
 
 export function ProductModal({
@@ -29,10 +37,18 @@ export function ProductModal({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(product?.image_url ?? null);
+  const [category, setCategory] = useState<ProductCategory>(product?.category ?? null);
+  const [visibleForSale, setVisibleForSale] = useState(product?.is_visible_for_sale ?? true);
+  const [availableForServices, setAvailableForServices] = useState(
+    product?.available_for_services ?? true
+  );
 
   function handleSubmit(formData: FormData) {
     setError(null);
     formData.set("imageUrl", imageUrl ?? "");
+    formData.set("category", category ?? "");
+    formData.set("visibleForSale", String(visibleForSale));
+    formData.set("availableForServices", String(availableForServices));
 
     startTransition(async () => {
       const result = await upsertProduct(product?.id ?? null, formData);
@@ -65,23 +81,106 @@ export function ProductModal({
         <ImageUploader folder="products" value={imageUrl} onChange={setImageUrl} />
 
         <Field label="Nombre del producto">
-          <input name="name" required maxLength={150} defaultValue={product?.name} className="form-input" />
+          <input
+            name="name"
+            required
+            maxLength={150}
+            defaultValue={product?.name}
+            className="form-input"
+            placeholder="Ej. Pomada mate"
+          />
         </Field>
+
+        {/* Category — drives how it's grouped when the client picks products */}
+        <div>
+          <label className="text-sm font-medium text-foreground mb-1.5 block">
+            Categoría (para servicios)
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <CategoryButton
+              active={category === "dry"}
+              onClick={() => setCategory("dry")}
+              icon={<Wind size={15} />}
+              label="Seco"
+            />
+            <CategoryButton
+              active={category === "wet"}
+              onClick={() => setCategory("wet")}
+              icon={<Droplet size={15} />}
+              label="Húmedo"
+            />
+            <CategoryButton
+              active={category === null}
+              onClick={() => setCategory(null)}
+              icon={<Store size={15} />}
+              label="Ninguna"
+            />
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Precio">
-            <input type="number" name="price" min={0} step="0.01" required defaultValue={product?.price} className="form-input" />
+          <Field label="Precio ($)">
+            <input
+              type="number"
+              name="price"
+              min={0}
+              step="0.01"
+              required
+              defaultValue={product?.price}
+              className="form-input"
+            />
           </Field>
           <Field label="Stock actual">
-            <input type="number" name="stock" min={0} required defaultValue={product?.stock ?? 0} className="form-input" />
+            <input
+              type="number"
+              name="stock"
+              min={0}
+              required
+              defaultValue={product?.stock ?? 0}
+              className="form-input"
+            />
           </Field>
         </div>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Alerta stock bajo">
-            <input type="number" name="lowStockThreshold" min={0} required defaultValue={product?.low_stock_threshold ?? 8} className="form-input" />
+            <input
+              type="number"
+              name="lowStockThreshold"
+              min={0}
+              required
+              defaultValue={product?.low_stock_threshold ?? 8}
+              className="form-input"
+            />
           </Field>
           <Field label="Alerta stock crítico">
-            <input type="number" name="criticalStockThreshold" min={0} required defaultValue={product?.critical_stock_threshold ?? 3} className="form-input" />
+            <input
+              type="number"
+              name="criticalStockThreshold"
+              min={0}
+              required
+              defaultValue={product?.critical_stock_threshold ?? 3}
+              className="form-input"
+            />
           </Field>
+        </div>
+
+        {/* Independent visibility switches */}
+        <div className="space-y-2">
+          <ToggleRow
+            icon={<Store size={16} className="text-brand" />}
+            title="Visible para venta"
+            hint="Aparece en la tienda para que los clientes lo compren."
+            checked={visibleForSale}
+            onChange={() => setVisibleForSale((v) => !v)}
+          />
+          <ToggleRow
+            icon={<Scissors size={16} className="text-brand" />}
+            title="Disponible para servicios"
+            hint="El cliente puede pedir que lo uses durante su cita, aunque no esté a la venta."
+            checked={availableForServices}
+            onChange={() => setAvailableForServices((v) => !v)}
+          />
         </div>
 
         {error && <p className="text-sm text-danger bg-danger-light rounded-lg px-3 py-2">{error}</p>}
@@ -112,11 +211,65 @@ export function ProductModal({
             border-radius: 0.75rem;
             border: 1px solid var(--border);
             background: var(--background);
-            font-size: 0.875rem;
+            font-size: 1rem;
+            color: var(--foreground);
           }
         `}</style>
       </form>
     </Modal>
+  );
+}
+
+function CategoryButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "h-11 rounded-xl border text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors",
+        active ? "bg-brand border-brand text-white" : "border-border bg-background text-muted"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function ToggleRow({
+  icon,
+  title,
+  hint,
+  checked,
+  onChange,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 bg-background rounded-xl border border-border px-4 py-3">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+          {icon}
+          {title}
+        </p>
+        <p className="text-xs text-muted mt-0.5">{hint}</p>
+      </div>
+      <Switch checked={checked} onChange={onChange} label={title} />
+    </div>
   );
 }
 

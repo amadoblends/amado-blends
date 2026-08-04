@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Phone, MessageSquare } from "lucide-react";
+import { Phone, MessageSquare, UserPlus, Wind, Droplet, Sparkles } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
+import { relationshipLabel } from "@/lib/guests";
 import { createClient } from "@/lib/supabase/server";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/badge";
@@ -17,6 +18,7 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
 
   const [
     { data: appointment },
+    { data: serviceProducts },
     { data: requestedProducts },
     { data: guests },
     { data: allServices },
@@ -25,10 +27,14 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
     supabase
       .from("appointments")
       .select(
-        "id, starts_at, ends_at, status, price, notes, service_id, clients(id, full_name, phone, email, avatar_url, quick_notes), services(name, color)"
+        "id, starts_at, ends_at, status, price, notes, service_id, guest_name, guest_relationship, clients(id, full_name, phone, email, avatar_url, quick_notes), services(name, color)"
       )
       .eq("id", id)
       .single(),
+    supabase
+      .from("appointment_service_products")
+      .select("id, products(name, image_url, category)")
+      .eq("appointment_id", id),
     supabase
       .from("appointment_products")
       .select("id, quantity, products(name, price, image_url)")
@@ -65,14 +71,35 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
 
       <div className="bg-surface rounded-2xl border border-border p-4 space-y-4">
         <div className="flex items-center gap-3">
-          <Avatar name={client.full_name} src={client.avatar_url} size={48} />
+          <Avatar
+            name={appointment.guest_name ?? client.full_name}
+            src={appointment.guest_name ? null : client.avatar_url}
+            size={48}
+          />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-foreground truncate">{client.full_name}</p>
+            <p className="font-semibold text-foreground truncate">
+              {appointment.guest_name ?? client.full_name}
+            </p>
+            {appointment.guest_name && (
+              <p className="text-xs text-brand font-semibold">
+                {relationshipLabel(appointment.guest_relationship)} de {client.full_name}
+              </p>
+            )}
             <p className="text-sm text-muted">{client.phone}</p>
             {client.email && <p className="text-xs text-muted truncate">{client.email}</p>}
           </div>
           <StatusBadge status={appointment.status} />
         </div>
+
+        {appointment.guest_name && (
+          <div className="bg-brand-light rounded-xl px-3 py-2 flex items-start gap-2">
+            <UserPlus size={14} className="text-brand shrink-0 mt-0.5" />
+            <p className="text-xs text-brand">
+              Cita de invitado. La reservó <strong>{client.full_name}</strong> desde su cuenta — los
+              datos de contacto son los del titular.
+            </p>
+          </div>
+        )}
 
         {client.quick_notes && (
           <div className="bg-brand-light rounded-xl px-3 py-2">
@@ -132,6 +159,39 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
           {appointment.notes && <Row label="Notas">{appointment.notes}</Row>}
         </dl>
       </div>
+
+      {serviceProducts && serviceProducts.length > 0 && (
+        <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
+          <p className="font-semibold text-foreground text-sm flex items-center gap-1.5">
+            <Sparkles size={15} className="text-brand" />
+            Productos que pidió usar en el servicio
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {serviceProducts.map((sp) => {
+              const product = sp.products as unknown as {
+                name: string;
+                category: "dry" | "wet" | null;
+              };
+              return (
+                <span
+                  key={sp.id}
+                  className="inline-flex items-center gap-1 px-2.5 h-8 rounded-full bg-brand-light border border-brand/20 text-xs font-semibold text-brand"
+                >
+                  {product.category === "dry" ? (
+                    <Wind size={11} />
+                  ) : product.category === "wet" ? (
+                    <Droplet size={11} />
+                  ) : null}
+                  {product.name}
+                </span>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted pt-2 border-t border-border">
+            Ten estos productos a mano durante la cita.
+          </p>
+        </div>
+      )}
 
       {requestedProducts && requestedProducts.length > 0 && (
         <div className="bg-surface rounded-2xl border border-border p-4 space-y-3">
