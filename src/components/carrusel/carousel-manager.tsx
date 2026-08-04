@@ -5,14 +5,18 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { format, isAfter, isBefore, startOfDay } from "date-fns";
 import { es } from "date-fns/locale";
-import { Plus, Images, Trash2, Pause, Play, Pencil, Clock, CalendarRange } from "lucide-react";
+import {
+  Plus, Images, Trash2, Pause, Play, Pencil, CalendarRange, Eye,
+  ArrowUp, ArrowDown, FileEdit, Send, Scissors, AlertTriangle,
+} from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { ImageUploader } from "@/components/ui/image-uploader";
 import {
   upsertCarouselPost,
-  toggleCarouselPost,
+  setCarouselFlags,
+  moveCarouselPost,
   deleteCarouselPost,
   CAROUSEL_TYPES,
 } from "@/lib/actions/carousel";
@@ -30,52 +34,43 @@ export interface CarouselPost {
   ends_on: string | null;
   sort_order: number;
   is_active: boolean;
+  is_draft: boolean;
 }
 
-type Status = "activa" | "programada" | "vencida" | "pausada";
+type Status = "borrador" | "programada" | "activa" | "pausada" | "finalizada";
 
 function statusOf(p: CarouselPost): Status {
+  if (p.is_draft) return "borrador";
   if (!p.is_active) return "pausada";
   const today = startOfDay(new Date());
+  if (p.ends_on && isBefore(new Date(p.ends_on + "T23:59:59"), today)) return "finalizada";
   if (p.starts_on && isAfter(new Date(p.starts_on + "T00:00:00"), today)) return "programada";
-  if (p.ends_on && isBefore(new Date(p.ends_on + "T23:59:59"), today)) return "vencida";
   return "activa";
 }
 
 const STATUS_STYLE: Record<Status, string> = {
-  activa: "bg-success-light text-success",
+  borrador: "bg-border text-muted",
   programada: "bg-info-light text-info",
-  vencida: "bg-border text-muted",
+  activa: "bg-success-light text-success",
   pausada: "bg-warning-light text-warning",
+  finalizada: "bg-border text-muted",
 };
 
-export function CarouselManager({ posts }: { posts: CarouselPost[] }) {
+export function CarouselManager({
+  posts,
+  loadError,
+}: {
+  posts: CarouselPost[];
+  loadError?: string | null;
+}) {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<CarouselPost | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function openCreate() {
-    setEditing(null);
-    setModalOpen(true);
-  }
-
-  function openEdit(p: CarouselPost) {
-    setEditing(p);
-    setModalOpen(true);
-  }
-
-  function togglePost(p: CarouselPost) {
+  function run(fn: () => Promise<unknown>) {
     startTransition(async () => {
-      await toggleCarouselPost(p.id, !p.is_active);
-      router.refresh();
-    });
-  }
-
-  function removePost(p: CarouselPost) {
-    if (!confirm(`¿Eliminar «${p.title}»?`)) return;
-    startTransition(async () => {
-      await deleteCarouselPost(p.id);
+      await fn();
       router.refresh();
     });
   }
@@ -85,11 +80,14 @@ export function CarouselManager({ posts }: { posts: CarouselPost[] }) {
       <header className="flex items-center gap-3">
         <BackButton />
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-foreground">Carrusel del cliente</h1>
-          <p className="text-sm text-muted">Anuncios que verán en su pantalla de inicio</p>
+          <h1 className="text-xl font-bold text-foreground">Carrusel</h1>
+          <p className="text-sm text-muted">Lo que verán tus clientes al abrir la app</p>
         </div>
         <button
-          onClick={openCreate}
+          onClick={() => {
+            setEditing(null);
+            setModalOpen(true);
+          }}
           className="w-10 h-10 rounded-full bg-brand text-white flex items-center justify-center shrink-0"
           aria-label="Nueva publicación"
         >
@@ -97,17 +95,30 @@ export function CarouselManager({ posts }: { posts: CarouselPost[] }) {
         </button>
       </header>
 
-      {posts.length === 0 ? (
+      {loadError && (
+        <div className="bg-danger-light rounded-2xl border border-danger/20 p-4 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-danger shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-danger">No se pudo cargar el carrusel</p>
+            <p className="text-xs text-muted mt-1">{loadError}</p>
+          </div>
+        </div>
+      )}
+
+      {!loadError && posts.length === 0 ? (
         <div className="bg-surface rounded-2xl border border-border p-10 text-center space-y-3">
           <Images size={30} className="text-muted mx-auto" />
           <div>
             <p className="text-sm font-semibold text-foreground">Sin publicaciones</p>
             <p className="text-xs text-muted mt-0.5">
-              Crea anuncios de promociones, vacaciones o días cerrados.
+              Anuncia promociones, vacaciones o días cerrados.
             </p>
           </div>
           <button
-            onClick={openCreate}
+            onClick={() => {
+              setEditing(null);
+              setModalOpen(true);
+            }}
             className="bg-brand text-white text-sm font-semibold px-4 py-2 rounded-xl"
           >
             Crear publicación
@@ -115,18 +126,40 @@ export function CarouselManager({ posts }: { posts: CarouselPost[] }) {
         </div>
       ) : (
         <div className="space-y-2">
-          {posts.map((p) => {
+          {posts.map((p, i) => {
             const status = statusOf(p);
             const meta = CAROUSEL_TYPES.find((t) => t.value === p.type);
+            const dimmed = status === "finalizada" || status === "borrador";
+
             return (
               <div
                 key={p.id}
                 className={cn(
                   "bg-surface rounded-2xl border border-border overflow-hidden",
-                  status === "vencida" && "opacity-60"
+                  dimmed && "opacity-70"
                 )}
               >
                 <div className="flex gap-3 p-3">
+                  {/* Order controls */}
+                  <div className="flex flex-col justify-center gap-1 shrink-0">
+                    <button
+                      onClick={() => run(() => moveCarouselPost(p.id, "up"))}
+                      disabled={i === 0 || isPending}
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted disabled:opacity-30"
+                      aria-label="Subir"
+                    >
+                      <ArrowUp size={13} />
+                    </button>
+                    <button
+                      onClick={() => run(() => moveCarouselPost(p.id, "down"))}
+                      disabled={i === posts.length - 1 || isPending}
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted disabled:opacity-30"
+                      aria-label="Bajar"
+                    >
+                      <ArrowDown size={13} />
+                    </button>
+                  </div>
+
                   <div className="w-16 h-16 rounded-xl bg-background border border-border shrink-0 relative overflow-hidden flex items-center justify-center">
                     {p.image_url ? (
                       <Image src={p.image_url} alt="" fill className="object-cover" />
@@ -140,7 +173,7 @@ export function CarouselManager({ posts }: { posts: CarouselPost[] }) {
                       <p className="text-sm font-bold text-foreground truncate">{p.title}</p>
                       <span
                         className={cn(
-                          "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+                          "text-[10px] font-semibold px-1.5 py-0.5 rounded-full capitalize",
                           STATUS_STYLE[status]
                         )}
                       >
@@ -168,28 +201,46 @@ export function CarouselManager({ posts }: { posts: CarouselPost[] }) {
 
                 <div className="flex border-t border-border divide-x divide-border">
                   <button
-                    onClick={() => openEdit(p)}
+                    onClick={() => {
+                      setEditing(p);
+                      setModalOpen(true);
+                    }}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-foreground active:bg-background"
                   >
                     <Pencil size={13} /> Editar
                   </button>
+
+                  {p.is_draft ? (
+                    <button
+                      onClick={() => run(() => setCarouselFlags(p.id, { isDraft: false }))}
+                      disabled={isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-brand active:bg-background disabled:opacity-50"
+                    >
+                      <Send size={13} /> Publicar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => run(() => setCarouselFlags(p.id, { isActive: !p.is_active }))}
+                      disabled={isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-foreground active:bg-background disabled:opacity-50"
+                    >
+                      {p.is_active ? (
+                        <>
+                          <Pause size={13} /> Pausar
+                        </>
+                      ) : (
+                        <>
+                          <Play size={13} /> Reanudar
+                        </>
+                      )}
+                    </button>
+                  )}
+
                   <button
-                    onClick={() => togglePost(p)}
-                    disabled={isPending}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-foreground active:bg-background disabled:opacity-50"
-                  >
-                    {p.is_active ? (
-                      <>
-                        <Pause size={13} /> Pausar
-                      </>
-                    ) : (
-                      <>
-                        <Play size={13} /> Activar
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => removePost(p)}
+                    onClick={() => {
+                      if (!confirm(`¿Eliminar «${p.title}»?`)) return;
+                      run(() => deleteCarouselPost(p.id));
+                    }}
                     disabled={isPending}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-danger active:bg-danger-light disabled:opacity-50"
                   >
@@ -212,7 +263,7 @@ export function CarouselManager({ posts }: { posts: CarouselPost[] }) {
   );
 }
 
-// ── Create / edit modal ───────────────────────────────────────────────────
+// ── Create / edit ──────────────────────────────────────────────────────────
 
 function PostModal({
   open,
@@ -226,15 +277,21 @@ function PostModal({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(post?.image_url ?? null);
-  const [type, setType] = useState(post?.type ?? "promocion");
-  const [isActive, setIsActive] = useState(post?.is_active ?? true);
+  const [showPreview, setShowPreview] = useState(false);
 
-  function handleSubmit(formData: FormData) {
+  const [imageUrl, setImageUrl] = useState<string | null>(post?.image_url ?? null);
+  const [type, setType] = useState<string>(post?.type ?? "promocion");
+  const [isActive, setIsActive] = useState(post?.is_active ?? true);
+  const [title, setTitle] = useState(post?.title ?? "");
+  const [description, setDescription] = useState(post?.description ?? "");
+  const [buttonLabel, setButtonLabel] = useState(post?.button_label ?? "");
+
+  function submit(formData: FormData, asDraft: boolean) {
     setError(null);
     formData.set("imageUrl", imageUrl ?? "");
     formData.set("type", type);
     formData.set("isActive", String(isActive));
+    formData.set("isDraft", String(asDraft));
 
     startTransition(async () => {
       const result = await upsertCarouselPost(post?.id ?? null, formData);
@@ -247,9 +304,15 @@ function PostModal({
     });
   }
 
+  const meta = CAROUSEL_TYPES.find((t) => t.value === type);
+
   return (
     <Modal open={open} onClose={onClose} title={post ? "Editar publicación" : "Nueva publicación"}>
-      <form action={handleSubmit} className="space-y-4">
+      <form
+        action={(fd) => submit(fd, false)}
+        id="carousel-form"
+        className="space-y-4"
+      >
         <ImageUploader folder="products" value={imageUrl} onChange={setImageUrl} />
 
         <Field label="Título">
@@ -257,7 +320,8 @@ function PostModal({
             name="title"
             required
             maxLength={120}
-            defaultValue={post?.title}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
             placeholder="Ej. 20% OFF en cortes clásicos"
             className="form-input"
           />
@@ -268,7 +332,8 @@ function PostModal({
             name="description"
             rows={2}
             maxLength={400}
-            defaultValue={post?.description ?? ""}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
             placeholder="Detalles del anuncio..."
             className="form-input resize-none"
           />
@@ -278,20 +343,20 @@ function PostModal({
           <label className="text-sm font-medium text-foreground mb-1.5 block">
             Tipo de publicación
           </label>
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-3 gap-1.5">
             {CAROUSEL_TYPES.map((t) => (
               <button
                 key={t.value}
                 type="button"
                 onClick={() => setType(t.value)}
                 className={cn(
-                  "h-14 rounded-xl border text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 px-1 transition-colors",
+                  "h-16 rounded-xl border text-[10px] font-semibold flex flex-col items-center justify-center gap-1 px-1 transition-colors",
                   type === t.value
                     ? "bg-brand border-brand text-white"
                     : "border-border bg-background text-muted"
                 )}
               >
-                <span className="text-base leading-none">{t.emoji}</span>
+                <span className="text-lg leading-none">{t.emoji}</span>
                 <span className="leading-tight text-center">{t.label}</span>
               </button>
             ))}
@@ -299,7 +364,7 @@ function PostModal({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Desde (opcional)">
+          <Field label="Aparece desde">
             <input
               type="date"
               name="startsOn"
@@ -307,7 +372,7 @@ function PostModal({
               className="form-input"
             />
           </Field>
-          <Field label="Hasta (opcional)">
+          <Field label="Deja de mostrarse">
             <input
               type="date"
               name="endsOn"
@@ -322,7 +387,8 @@ function PostModal({
             <input
               name="buttonLabel"
               maxLength={40}
-              defaultValue={post?.button_label ?? ""}
+              value={buttonLabel}
+              onChange={(e) => setButtonLabel(e.target.value)}
               placeholder="Reservar"
               className="form-input"
             />
@@ -359,22 +425,80 @@ function PostModal({
           <Switch checked={isActive} onChange={() => setIsActive((v) => !v)} label="Activa" />
         </div>
 
-        <div className="bg-brand-light rounded-xl p-3 border border-brand/20 flex items-start gap-2">
-          <Clock size={14} className="text-brand shrink-0 mt-0.5" />
-          <p className="text-xs text-brand">
-            Sin fechas se muestra de inmediato. Con fechas aparece y desaparece sola.
-          </p>
-        </div>
+        {/* Preview */}
+        <button
+          type="button"
+          onClick={() => setShowPreview((v) => !v)}
+          className="w-full flex items-center justify-center gap-2 h-11 rounded-xl border border-border bg-background text-sm font-semibold text-foreground"
+        >
+          <Eye size={15} /> {showPreview ? "Ocultar vista previa" : "Ver vista previa"}
+        </button>
+
+        {showPreview && (
+          <div className="rounded-2xl overflow-hidden">
+            <p className="text-[10px] font-bold text-muted uppercase tracking-wide mb-1.5">
+              Así lo verá el cliente
+            </p>
+            <div
+              className="relative rounded-3xl overflow-hidden"
+              style={
+                imageUrl
+                  ? {
+                      backgroundImage: `linear-gradient(100deg, rgba(11,11,13,0.94) 5%, rgba(11,11,13,0.7) 55%, rgba(11,11,13,0.35) 100%), url('${imageUrl}')`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }
+                  : {
+                      backgroundImage:
+                        "linear-gradient(100deg, rgba(11,11,13,0.95) 5%, rgba(11,11,13,0.6) 50%, rgba(255,106,61,0.35) 130%)",
+                    }
+              }
+            >
+              <div className="p-5 pr-20 min-h-[150px] flex flex-col justify-center">
+                <span className="inline-flex self-start items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-brand bg-brand/15 px-2 py-1 rounded-full mb-2">
+                  {meta?.emoji} {meta?.label}
+                </span>
+                <p className="text-[20px] leading-[1.15] font-black text-white uppercase">
+                  {title || "Título de tu publicación"}
+                </p>
+                {description && (
+                  <p className="text-xs text-white/70 mt-1.5 line-clamp-2">{description}</p>
+                )}
+                {buttonLabel && (
+                  <span className="mt-3 inline-flex self-start bg-brand text-white text-xs font-bold px-4 py-2 rounded-xl">
+                    {buttonLabel}
+                  </span>
+                )}
+              </div>
+              {!imageUrl && (
+                <Scissors
+                  size={80}
+                  className="absolute -right-3 top-1/2 -translate-y-1/2 text-brand/15 rotate-[-20deg]"
+                />
+              )}
+            </div>
+          </div>
+        )}
 
         {error && <p className="text-sm text-danger bg-danger-light rounded-lg px-3 py-2">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={isPending}
-          className="w-full bg-brand text-white font-semibold py-3 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-60"
-        >
-          {isPending ? "Guardando..." : post ? "Guardar cambios" : "Publicar"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            formAction={(fd) => submit(fd, true)}
+            disabled={isPending}
+            className="flex-1 flex items-center justify-center gap-1.5 border border-border text-foreground font-semibold py-3 rounded-xl disabled:opacity-60"
+          >
+            <FileEdit size={15} /> Borrador
+          </button>
+          <button
+            type="submit"
+            disabled={isPending}
+            className="flex-[2] bg-brand text-white font-semibold py-3 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-60"
+          >
+            {isPending ? "Guardando..." : post ? "Guardar cambios" : "Publicar"}
+          </button>
+        </div>
 
         <style jsx global>{`
           .form-input {

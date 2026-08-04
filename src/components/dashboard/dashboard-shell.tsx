@@ -27,25 +27,23 @@ export function DashboardShell({
   const [editing, setEditing] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
 
-  const firstName = profileName.split(" ")[0];
-
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-6">
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3.5 min-w-0">
-          <button
-            onClick={() => setPhotoOpen(true)}
-            aria-label="Ver foto de perfil"
-            className="shrink-0 rounded-full ring-2 ring-brand/20 active:scale-95 transition-transform"
-          >
-            <Avatar src={avatarUrl} name={profileName} size={64} />
-          </button>
-          <div className="min-w-0">
-            <p className="text-[11px] text-muted leading-none">Panel admin</p>
-            <p className="text-xl font-bold text-foreground leading-tight truncate mt-0.5">
-              {profileName}
-            </p>
-          </div>
+    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
+      {/* Profile card — dark surface, no border, actions on the right */}
+      <header className="rounded-3xl bg-[#15171c] px-4 py-4 sm:px-5 sm:py-5 flex items-center gap-4">
+        <button
+          onClick={() => setPhotoOpen(true)}
+          aria-label="Ver foto de perfil"
+          className="shrink-0 rounded-full ring-2 ring-white/15 active:scale-95 transition-transform"
+        >
+          <Avatar src={avatarUrl} name={profileName} size={60} />
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-lg sm:text-xl font-bold text-white leading-tight truncate">
+            {profileName}
+          </p>
+          <p className="text-[11px] text-white/45 leading-none mt-1 tracking-wide">Panel Admin</p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -54,10 +52,8 @@ export function DashboardShell({
             aria-label={editing ? "Terminar edición" : "Personalizar dashboard"}
             title={editing ? "Terminar" : "Personalizar dashboard"}
             className={cn(
-              "w-11 h-11 rounded-full border flex items-center justify-center transition-colors",
-              editing
-                ? "bg-brand border-brand text-white"
-                : "bg-surface border-border text-foreground"
+              "w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-colors",
+              editing ? "bg-brand text-white" : "bg-white/10 text-white active:bg-white/20"
             )}
           >
             {editing ? <Check size={19} /> : <Pencil size={18} />}
@@ -65,22 +61,18 @@ export function DashboardShell({
 
           <Link
             href="/notificaciones"
-            className="relative w-11 h-11 rounded-full bg-surface border border-border flex items-center justify-center"
+            aria-label="Notificaciones"
+            className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/10 flex items-center justify-center active:bg-white/20 transition-colors"
           >
-            <Bell size={20} className="text-foreground" />
+            <Bell size={19} className="text-white" />
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[10px] font-bold flex items-center justify-center">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#15171c]">
                 {unreadCount}
               </span>
             )}
           </Link>
         </div>
       </header>
-
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">¡Buenos días, {firstName}! 👋</h1>
-        <p className="text-muted text-sm mt-0.5">Aquí tienes el resumen de tu negocio.</p>
-      </div>
 
       <DashboardWidgets
         data={data}

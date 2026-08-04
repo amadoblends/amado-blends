@@ -42,7 +42,8 @@
       "Bash(sed -i 's|<CalendarPlus size={17} /> Reservar cita|<CalendarPlus size={17} /> {t\\(\"nav.book\"\\)}|' src/components/ui/side-nav.tsx)",
       "Bash(sed -i 's|^              {item.label}$|              {t\\(item.key\\)}|' src/components/ui/side-nav.tsx)",
       "Bash(python3 -)",
-      "Bash(git commit -m 'Readable appointment blocks, editable dashboard, real client segments, carousel admin *)"
+      "Bash(git commit -m 'Readable appointment blocks, editable dashboard, real client segments, carousel admin *)",
+      "Bash(grep -n 'Row\\({ label, value }' -A 8 src/components/booking/booking-wizard.tsx)"
     ]
   }
 }
