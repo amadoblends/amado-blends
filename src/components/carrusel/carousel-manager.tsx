@@ -18,8 +18,8 @@ import {
   setCarouselFlags,
   moveCarouselPost,
   deleteCarouselPost,
-  CAROUSEL_TYPES,
 } from "@/lib/actions/carousel";
+import { CAROUSEL_TYPES } from "@/lib/carousel-types";
 import { cn } from "@/lib/utils";
 
 export interface CarouselPost {

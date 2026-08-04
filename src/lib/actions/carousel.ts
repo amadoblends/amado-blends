@@ -4,29 +4,13 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/actions/appointments";
-
-export const CAROUSEL_TYPES = [
-  { value: "promocion", label: "Promoción", emoji: "🎉" },
-  { value: "oferta", label: "Oferta", emoji: "🏷️" },
-  { value: "vacaciones", label: "Vacaciones", emoji: "🌴" },
-  { value: "cerrado", label: "Día cerrado", emoji: "🚫" },
-  { value: "holiday", label: "Feriado", emoji: "📅" },
-  { value: "horario", label: "Horario especial", emoji: "🕐" },
-  { value: "servicio", label: "Nuevo servicio", emoji: "✂️" },
-  { value: "aviso", label: "Aviso importante", emoji: "📢" },
-  { value: "info", label: "Información", emoji: "ℹ️" },
-] as const;
-
-const TYPE_VALUES = [
-  "promocion", "oferta", "vacaciones", "cerrado", "holiday",
-  "horario", "servicio", "aviso", "info",
-] as const;
+import { CAROUSEL_TYPE_VALUES } from "@/lib/carousel-types";
 
 const postSchema = z.object({
   title: z.string().trim().min(2).max(120),
   description: z.string().trim().max(400).optional().or(z.literal("")),
   imageUrl: z.string().url().max(2000).optional().or(z.literal("")),
-  type: z.enum(TYPE_VALUES),
+  type: z.enum(CAROUSEL_TYPE_VALUES),
   buttonLabel: z.string().trim().max(40).optional().or(z.literal("")),
   buttonHref: z.string().trim().max(300).optional().or(z.literal("")),
   startsOn: z.string().optional().or(z.literal("")),
@@ -85,8 +69,12 @@ export async function upsertCarouselPost(
 
   const { error } = await query;
   if (error) {
-    // Most common cause: the migration hasn't been run yet
-    if (error.code === "42P01") {
+    // Postgres says 42P01, PostgREST wraps it as PGRST205
+    const tableMissing =
+      error.code === "42P01" ||
+      error.code === "PGRST205" ||
+      /schema cache|does not exist/i.test(error.message);
+    if (tableMissing) {
       return {
         ok: false,
         error: "Falta crear la tabla. Corre migration_16_carousel_status.sql en Supabase.",

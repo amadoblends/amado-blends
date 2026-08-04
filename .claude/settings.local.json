@@ -43,7 +43,8 @@
       "Bash(sed -i 's|^              {item.label}$|              {t\\(item.key\\)}|' src/components/ui/side-nav.tsx)",
       "Bash(python3 -)",
       "Bash(git commit -m 'Readable appointment blocks, editable dashboard, real client segments, carousel admin *)",
-      "Bash(grep -n 'Row\\({ label, value }' -A 8 src/components/booking/booking-wizard.tsx)"
+      "Bash(grep -n 'Row\\({ label, value }' -A 8 src/components/booking/booking-wizard.tsx)",
+      "Bash(git commit -m 'Fix carousel page crash: constant exported from a use-server module *)"
     ]
   }
 }
