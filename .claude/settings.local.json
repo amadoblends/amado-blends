@@ -44,7 +44,15 @@
       "Bash(python3 -)",
       "Bash(git commit -m 'Readable appointment blocks, editable dashboard, real client segments, carousel admin *)",
       "Bash(grep -n 'Row\\({ label, value }' -A 8 src/components/booking/booking-wizard.tsx)",
-      "Bash(git commit -m 'Fix carousel page crash: constant exported from a use-server module *)"
+      "Bash(git commit -m 'Fix carousel page crash: constant exported from a use-server module *)",
+      "Bash(sed -i 's|className=\"w-10 h-10 rounded-full bg-violet text-white flex items-center justify-center\"|className=\"w-10 h-10 rounded-full bg-foreground text-background flex items-center justify-center\"|' \"src/app/\\(admin\\)/clientes/page.tsx\")",
+      "Bash(sed -i 's|? \"bg-violet text-white border-violet\"|? \"bg-foreground text-background border-foreground\"|' src/components/clientes/client-search.tsx)",
+      "Bash(sed -i 's|focus:ring-2 focus:ring-violet/40|focus:ring-2 focus:ring-brand/40|' src/components/clientes/client-search.tsx)",
+      "Bash(sed -i 's|active ? \"bg-violet text-white\" : \"bg-surface text-foreground border border-border\"|active ? \"bg-foreground text-background\" : \"bg-surface text-foreground border border-border\"|' src/components/citas/date-strip.tsx)",
+      "Bash(sed -i 's|className=\"w-full bg-violet text-white font-semibold py-3 rounded-xl|className=\"w-full bg-brand text-white font-semibold py-3 rounded-xl|' src/components/clientes/client-form.tsx)",
+      "Bash(sed -i 's|isSelected \\\\&\\\\& \"bg-violet text-white font-bold\",|isSelected \\\\&\\\\& \"bg-brand text-white font-bold\",|' src/components/citas/calendar-picker.tsx)",
+      "Bash(sed -i 's|return generateSlots\\(dayAvail, service.duration_minutes, minNoticeMinutes, date, busy\\);|return generateSlots\\(dayAvail, service.duration_minutes, minNoticeMinutes, date, busy, slotOptions\\);|' src/components/booking/booking-wizard.tsx)",
+      "Bash(sed -i 's|return generateSlots\\(av, service.duration_minutes, minNoticeMinutes, ds, busy\\).length;|return generateSlots\\(av, service.duration_minutes, minNoticeMinutes, ds, busy, slotOptions\\).length;|' src/components/booking/booking-wizard.tsx)"
     ]
   }
 }

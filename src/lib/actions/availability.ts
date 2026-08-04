@@ -85,6 +85,8 @@ const settingsSchema = z.object({
   bookingWindowDays: z.coerce.number().int().min(1).max(365),
   minNoticeMinutes: z.coerce.number().int().min(0).max(10080),
   bufferMinutes: z.coerce.number().int().min(0).max(120),
+  slotIntervalMinutes: z.coerce.number().int().min(5).max(240),
+  optimizeGaps: z.enum(["true", "false"]).default("false"),
 });
 
 export async function updateBookingSettings(formData: FormData): Promise<ActionResult> {
@@ -96,6 +98,8 @@ export async function updateBookingSettings(formData: FormData): Promise<ActionR
     bookingWindowDays: formData.get("bookingWindowDays"),
     minNoticeMinutes: formData.get("minNoticeMinutes"),
     bufferMinutes: formData.get("bufferMinutes") ?? "0",
+    slotIntervalMinutes: formData.get("slotIntervalMinutes") ?? "30",
+    optimizeGaps: formData.get("optimizeGaps") ?? "false",
   });
   if (!parsed.success) return { ok: false, error: "Datos inválidos." };
 
@@ -105,6 +109,8 @@ export async function updateBookingSettings(formData: FormData): Promise<ActionR
       booking_window_days: parsed.data.bookingWindowDays,
       min_notice_minutes: parsed.data.minNoticeMinutes,
       buffer_minutes: parsed.data.bufferMinutes,
+      slot_interval_minutes: parsed.data.slotIntervalMinutes,
+      optimize_gaps: parsed.data.optimizeGaps === "true",
     })
     .eq("id", 1);
 

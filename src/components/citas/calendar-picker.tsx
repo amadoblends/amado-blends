@@ -100,7 +100,7 @@ export function CalendarPicker({
                 !inMonth && "text-muted/40",
                 disabled && "text-muted/30 cursor-not-allowed",
                 !disabled && inMonth && "text-foreground",
-                isSelected && "bg-violet text-white font-bold",
+                isSelected && "bg-brand text-white font-bold",
                 !isSelected && isToday && "border border-brand text-brand font-bold"
               )}
             >

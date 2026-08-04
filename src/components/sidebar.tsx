@@ -19,10 +19,13 @@ import {
   Search,
   PanelLeftClose,
   PanelLeftOpen,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/actions/auth";
 import { SearchModal, useSearchHotkey } from "@/components/search-modal";
+import { useTheme } from "@/components/theme/theme-provider";
 
 const links = [
   { href: "/", label: "Inicio", icon: Home },
@@ -45,6 +48,7 @@ export function Sidebar() {
   const [pinned, setPinned] = useState(true);
   const [hovering, setHovering] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const openSearch = useCallback(() => setSearchOpen(true), []);
   useSearchHotkey(openSearch);
@@ -97,8 +101,10 @@ export function Sidebar() {
       >
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-4 py-5 shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center text-white font-bold shrink-0">
-            AB
+          {/* Monogram stays neutral; orange is only the accent underline */}
+          <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center shrink-0 relative overflow-hidden">
+            <span className="text-background font-black text-sm tracking-tight">AB</span>
+            <span className="absolute bottom-0 inset-x-0 h-[3px] bg-brand" />
           </div>
           <div
             className={cn(
@@ -168,6 +174,29 @@ export function Sidebar() {
 
         {/* Footer */}
         <div className="px-3 py-3 border-t border-border space-y-1 shrink-0">
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+            className={cn(
+              "w-full flex items-center gap-3 h-10 rounded-xl text-sm font-medium text-muted hover:bg-background transition-colors",
+              expanded ? "px-3" : "justify-center px-0"
+            )}
+          >
+            {theme === "dark" ? (
+              <Sun size={18} className="shrink-0" />
+            ) : (
+              <Moon size={18} className="shrink-0" />
+            )}
+            <span
+              className={cn(
+                "truncate transition-opacity duration-150",
+                expanded ? "opacity-100" : "opacity-0 w-0"
+              )}
+            >
+              {theme === "dark" ? "Modo claro" : "Modo oscuro"}
+            </span>
+          </button>
+
           <button
             onClick={togglePinned}
             title={pinned ? "Colapsar menú" : "Fijar menú abierto"}

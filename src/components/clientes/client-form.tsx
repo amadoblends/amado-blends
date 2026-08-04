@@ -80,7 +80,7 @@ export function ClientForm({ mode, clientId, defaults }: ClientFormProps) {
       <button
         type="submit"
         disabled={isPending}
-        className="w-full bg-violet text-white font-semibold py-3 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-60"
+        className="w-full bg-brand text-white font-semibold py-3 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-60"
       >
         {isPending ? "Guardando..." : mode === "create" ? "Crear cliente" : "Guardar cambios"}
       </button>

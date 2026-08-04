@@ -35,14 +35,14 @@ export function DateStrip({
             onClick={() => router.push(`/citas?date=${key}`)}
             className={cn(
               "flex flex-col items-center gap-1 py-2 rounded-xl transition-colors",
-              active ? "bg-violet text-white" : "bg-surface text-foreground border border-border"
+              active ? "bg-foreground text-background" : "bg-surface text-foreground border border-border"
             )}
           >
             <span className="text-[10px] font-medium uppercase opacity-80">
               {format(d, "EEE", { locale: es })}
             </span>
             <span className="text-base font-bold">{format(d, "d")}</span>
-            <span className={cn("text-[10px]", active ? "text-white/80" : "text-muted")}>
+            <span className={cn("text-[10px]", active ? "text-background/70" : "text-muted")}>
               {counts[key] ?? 0}
             </span>
           </button>

@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
+import { CalendarOff } from "lucide-react";
 import { DayTimeline } from "./timeline";
 import { AppointmentWizard } from "./wizard";
 import { BlockHoursButton } from "./block-hours";
+import { ClosureModal } from "./closure-modal";
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
 import type { AppointmentRow, BlockedRange } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
@@ -28,6 +30,7 @@ export function DayCitasShell({
 }) {
   const router = useRouter();
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [closureOpen, setClosureOpen] = useState(false);
 
   return (
     <>
@@ -40,6 +43,22 @@ export function DayCitasShell({
       />
 
       <BlockHoursButton dateStr={dateStr} dayAvail={dayAvail} />
+
+      {/* Close whole days or a date range */}
+      <button
+        onClick={() => setClosureOpen(true)}
+        className="fixed z-30 bottom-[calc(196px+max(12px,var(--safe-bottom)))] right-4 md:bottom-40 md:right-6 w-11 h-11 rounded-full bg-surface border border-border shadow-md flex items-center justify-center active:scale-95 transition-transform"
+        aria-label="Cerrar días"
+        title="Cerrar días (vacaciones, feriados)"
+      >
+        <CalendarOff size={18} className="text-foreground" />
+      </button>
+
+      <ClosureModal
+        open={closureOpen}
+        onClose={() => setClosureOpen(false)}
+        defaultDate={dateStr}
+      />
 
       <AppointmentWizard
         open={wizardOpen}

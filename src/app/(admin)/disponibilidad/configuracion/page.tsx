@@ -22,6 +22,8 @@ export default async function BookingConfigPage() {
         bookingWindowDays={settings.booking_window_days}
         minNoticeMinutes={settings.min_notice_minutes}
         bufferMinutes={settings.buffer_minutes}
+        slotIntervalMinutes={settings.slot_interval_minutes}
+        optimizeGaps={settings.optimize_gaps}
       />
     </div>
   );

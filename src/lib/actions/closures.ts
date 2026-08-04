@@ -1,0 +1,285 @@
+"use server";
+
+import { z } from "zod";
+import { addDays, format, subDays } from "date-fns";
+import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+import type { ActionResult } from "@/lib/actions/appointments";
+import { CLOSURE_REASON_VALUES } from "@/lib/closures";
+import {
+  nextWorkingDay,
+  buildClosureTitle,
+  buildClosureDescription,
+  buildReturnTitle,
+  buildReturnDescription,
+} from "@/lib/closures";
+
+export interface ConflictingAppointment {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  clientName: string;
+  serviceName: string;
+  guestName: string | null;
+}
+
+const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const closureSchema = z.object({
+  startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  allDay: z.enum(["true", "false"]).default("true"),
+  startTime: z.string().regex(timeRegex).optional().or(z.literal("")),
+  endTime: z.string().regex(timeRegex).optional().or(z.literal("")),
+  reason: z.enum(CLOSURE_REASON_VALUES),
+  description: z.string().trim().max(400).optional().or(z.literal("")),
+  // "no" | "publicar" | "borrador"
+  announce: z.enum(["no", "publicar", "borrador"]).default("no"),
+  announceTitle: z.string().trim().max(120).optional().or(z.literal("")),
+  announceBody: z.string().trim().max(400).optional().or(z.literal("")),
+  announceReturnPost: z.enum(["true", "false"]).default("false"),
+});
+
+/**
+ * Appointments that fall inside a proposed closure. The UI shows these and
+ * blocks saving until the barber reschedules or cancels them.
+ */
+export async function findClosureConflicts(
+  startsOn: string,
+  endsOn: string,
+  allDay: boolean,
+  startTime?: string,
+  endTime?: string
+): Promise<ConflictingAppointment[]> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+
+  // Widen a day either side: the server is UTC, appointments are local
+  const from = new Date(startsOn + "T00:00:00");
+  const to = addDays(new Date(endsOn + "T00:00:00"), 1);
+
+  const { data } = await supabase
+    .from("appointments")
+    .select(
+      "id, starts_at, ends_at, guest_name, clients(full_name), services(name)"
+    )
+    .not("status", "in", "(cancelada,no_show)")
+    .gte("starts_at", subDays(from, 1).toISOString())
+    .lte("starts_at", addDays(to, 1).toISOString())
+    .order("starts_at");
+
+  const rows = (data ?? []).filter((a) => {
+    const start = new Date(a.starts_at);
+    const dayKey = format(start, "yyyy-MM-dd");
+    if (dayKey < startsOn || dayKey > endsOn) return false;
+    if (allDay) return true;
+    if (!startTime || !endTime) return true;
+
+    // Partial closure: only appointments overlapping the closed window
+    const mins = start.getHours() * 60 + start.getMinutes();
+    const endMins = new Date(a.ends_at).getHours() * 60 + new Date(a.ends_at).getMinutes();
+    const [sh, sm] = startTime.split(":").map(Number);
+    const [eh, em] = endTime.split(":").map(Number);
+    return mins < eh * 60 + em && endMins > sh * 60 + sm;
+  });
+
+  return rows.map((a) => ({
+    id: a.id,
+    starts_at: a.starts_at,
+    ends_at: a.ends_at,
+    clientName: (a.clients as unknown as { full_name: string } | null)?.full_name ?? "Cliente",
+    serviceName: (a.services as unknown as { name: string } | null)?.name ?? "Servicio",
+    guestName: a.guest_name,
+  }));
+}
+
+export async function createClosure(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: "No autenticado." };
+
+  const parsed = closureSchema.safeParse({
+    startsOn: formData.get("startsOn"),
+    endsOn: formData.get("endsOn"),
+    allDay: formData.get("allDay") || "true",
+    startTime: formData.get("startTime") || "",
+    endTime: formData.get("endTime") || "",
+    reason: formData.get("reason") || "otro",
+    description: formData.get("description") || "",
+    announce: formData.get("announce") || "no",
+    announceTitle: formData.get("announceTitle") || "",
+    announceBody: formData.get("announceBody") || "",
+    announceReturnPost: formData.get("announceReturnPost") || "false",
+  });
+
+  if (!parsed.success) return { ok: false, error: "Revisa las fechas del cierre." };
+  const d = parsed.data;
+
+  if (d.endsOn < d.startsOn) {
+    return { ok: false, error: "La fecha de fin debe ser posterior a la de inicio." };
+  }
+  const allDay = d.allDay === "true";
+  if (!allDay && (!d.startTime || !d.endTime)) {
+    return { ok: false, error: "Indica desde y hasta qué hora estarás cerrado." };
+  }
+  if (!allDay && d.startTime! >= d.endTime!) {
+    return { ok: false, error: "La hora de fin debe ser posterior a la de inicio." };
+  }
+
+  // Refuse to close over live appointments
+  const conflicts = await findClosureConflicts(
+    d.startsOn,
+    d.endsOn,
+    allDay,
+    d.startTime || undefined,
+    d.endTime || undefined
+  );
+  if (conflicts.length > 0) {
+    return {
+      ok: false,
+      error: `Hay ${conflicts.length} cita(s) en esas fechas. Reagéndalas o cancélalas antes de cerrar.`,
+    };
+  }
+
+  let carouselPostId: string | null = null;
+
+  // Optional announcement in the client carousel
+  if (d.announce !== "no") {
+    const { data: post, error: postError } = await supabase
+      .from("carousel_posts")
+      .insert({
+        title: d.announceTitle || buildClosureTitle(d.startsOn, d.endsOn),
+        description: d.announceBody || d.description || null,
+        type: d.reason === "vacaciones" ? "vacaciones" : "cerrado",
+        starts_on: null, // visible from today so clients see it coming
+        ends_on: d.endsOn,
+        is_active: true,
+        is_draft: d.announce === "borrador",
+        sort_order: 0,
+      })
+      .select("id")
+      .single();
+
+    if (postError) {
+      return {
+        ok: false,
+        error: `Cierre no guardado: ${postError.message}. ¿Corriste migration_16 y 17?`,
+      };
+    }
+    carouselPostId = post?.id ?? null;
+
+    // "Tomorrow I'm back" teaser, scheduled for the final closed day
+    if (d.announceReturnPost === "true") {
+      const { data: availability } = await supabase
+        .from("availability")
+        .select("weekday, is_active");
+      const activeWeekdays = new Set(
+        (availability ?? []).filter((a) => a.is_active).map((a) => a.weekday)
+      );
+      const back = nextWorkingDay(new Date(d.endsOn + "T00:00:00"), activeWeekdays);
+
+      if (back) {
+        await supabase.from("carousel_posts").insert({
+          title: buildReturnTitle(back),
+          description: buildReturnDescription(back),
+          type: "aviso",
+          starts_on: d.endsOn,
+          ends_on: format(back, "yyyy-MM-dd"),
+          button_label: "Reservar",
+          button_href: "/reservar",
+          is_active: true,
+          is_draft: false,
+          sort_order: 0,
+        });
+      }
+    }
+  }
+
+  const { error } = await supabase.from("closures").insert({
+    starts_on: d.startsOn,
+    ends_on: d.endsOn,
+    all_day: allDay,
+    start_time: allDay ? null : d.startTime,
+    end_time: allDay ? null : d.endTime,
+    reason: d.reason,
+    description: d.description || null,
+    carousel_post_id: carouselPostId,
+  });
+
+  if (error) {
+    const missing =
+      error.code === "42P01" ||
+      error.code === "PGRST205" ||
+      /schema cache|does not exist/i.test(error.message);
+    return {
+      ok: false,
+      error: missing
+        ? "Falta la tabla de cierres. Corre migration_17_closures_theme_slots.sql en Supabase."
+        : `No se pudo guardar el cierre: ${error.message}`,
+    };
+  }
+
+  revalidatePath("/citas");
+  revalidatePath("/disponibilidad");
+  revalidatePath("/carrusel");
+  return { ok: true };
+}
+
+export async function deleteClosure(closureId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: "No autenticado." };
+
+  const idCheck = z.string().uuid().safeParse(closureId);
+  if (!idCheck.success) return { ok: false, error: "Cierre inválido." };
+
+  // Drop the announcement alongside the closure it belongs to
+  const { data: closure } = await supabase
+    .from("closures")
+    .select("carousel_post_id")
+    .eq("id", idCheck.data)
+    .maybeSingle();
+
+  if (closure?.carousel_post_id) {
+    await supabase.from("carousel_posts").delete().eq("id", closure.carousel_post_id);
+  }
+
+  const { error } = await supabase.from("closures").delete().eq("id", idCheck.data);
+  if (error) return { ok: false, error: "No se pudo eliminar el cierre." };
+
+  revalidatePath("/citas");
+  revalidatePath("/disponibilidad");
+  return { ok: true };
+}
+
+/** Return date preview for the form, computed from the real schedule. */
+export async function previewReturnDate(endsOn: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return null;
+
+  const [{ data: availability }, { data: closures }] = await Promise.all([
+    supabase.from("availability").select("weekday, is_active"),
+    supabase.from("closures").select("starts_on, ends_on"),
+  ]);
+
+  const activeWeekdays = new Set(
+    (availability ?? []).filter((a) => a.is_active).map((a) => a.weekday)
+  );
+  const back = nextWorkingDay(new Date(endsOn + "T00:00:00"), activeWeekdays, closures ?? []);
+  return back ? back.toISOString() : null;
+}
+
+/** Ready-made announcement text so the form can prefill and let it be edited. */
+export async function buildAnnouncement(
+  startsOn: string,
+  endsOn: string
+): Promise<{ title: string; body: string; returnISO: string | null }> {
+  const returnISO = await previewReturnDate(endsOn);
+  return {
+    title: buildClosureTitle(startsOn, endsOn),
+    body: buildClosureDescription(startsOn, endsOn, returnISO ? new Date(returnISO) : null),
+    returnISO,
+  };
+}

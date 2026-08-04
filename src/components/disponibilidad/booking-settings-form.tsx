@@ -3,20 +3,28 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateBookingSettings } from "@/lib/actions/availability";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 
 export function BookingSettingsForm({
   bookingWindowDays,
   minNoticeMinutes,
   bufferMinutes,
+  slotIntervalMinutes = 30,
+  optimizeGaps = false,
 }: {
   bookingWindowDays: number;
   minNoticeMinutes: number;
   bufferMinutes: number;
+  slotIntervalMinutes?: number;
+  optimizeGaps?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slotInterval, setSlotInterval] = useState(slotIntervalMinutes);
+  const [optimize, setOptimize] = useState(optimizeGaps);
 
   function handleSubmit(formData: FormData) {
     setSaved(false);
@@ -98,6 +106,66 @@ export function BookingSettingsForm({
             <span className="text-sm text-muted whitespace-nowrap">minutos</span>
           </div>
         </Field>
+      </div>
+
+      {/* Slot interval — controls how often times are offered, not how long
+          a service lasts */}
+      <div className="bg-surface rounded-2xl border border-border p-4 space-y-4">
+        <p className="text-xs font-semibold text-muted uppercase tracking-wide">
+          Intervalo de turnos
+        </p>
+
+        <Field
+          label="Cada cuánto se ofrecen horarios"
+          hint="Solo cambia los horarios que ve el cliente (10:00, 10:30...). No cambia la duración real del servicio."
+        >
+          <div className="grid grid-cols-4 gap-1.5 mb-2">
+            {[15, 20, 30, 45].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setSlotInterval(m)}
+                className={cn(
+                  "h-11 rounded-xl border text-sm font-semibold transition-colors",
+                  slotInterval === m
+                    ? "bg-foreground border-foreground text-background"
+                    : "border-border bg-background text-muted"
+                )}
+              >
+                {m} min
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              name="slotIntervalMinutes"
+              min={5}
+              max={240}
+              step={5}
+              required
+              value={slotInterval}
+              onChange={(e) => setSlotInterval(Number(e.target.value))}
+              className="form-input flex-1"
+            />
+            <span className="text-sm text-muted whitespace-nowrap">minutos</span>
+          </div>
+        </Field>
+
+        <div className="flex items-center justify-between gap-3 bg-background rounded-xl border border-border px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Evitar espacios vacíos</p>
+            <p className="text-xs text-muted mt-0.5">
+              Prioriza horarios pegados a citas existentes para no dejar huecos inservibles.
+            </p>
+          </div>
+          <Switch
+            checked={optimize}
+            onChange={() => setOptimize((v) => !v)}
+            label="Optimizar horarios"
+          />
+        </div>
+        <input type="hidden" name="optimizeGaps" value={String(optimize)} />
       </div>
 
       {error && (

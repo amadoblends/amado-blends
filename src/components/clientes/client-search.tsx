@@ -41,7 +41,7 @@ export function ClientSearch({
           onKeyDown={(e) => e.key === "Enter" && go(value, activeFilter)}
           onBlur={() => go(value, activeFilter)}
           placeholder="Buscar cliente..."
-          className="w-full pl-11 pr-4 py-3 rounded-xl border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-violet/40"
+          className="w-full pl-11 pr-4 py-3 rounded-xl border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
         />
       </div>
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
@@ -54,7 +54,7 @@ export function ClientSearch({
               className={cn(
                 "px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap border flex items-center gap-1.5",
                 activeFilter === f.key
-                  ? "bg-violet text-white border-violet"
+                  ? "bg-foreground text-background border-foreground"
                   : "bg-surface text-foreground border-border"
               )}
             >

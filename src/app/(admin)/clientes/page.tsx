@@ -48,7 +48,7 @@ export default async function ClientsPage({
           </Link>
           <Link
             href="/clientes/nuevo"
-            className="w-10 h-10 rounded-full bg-violet text-white flex items-center justify-center"
+            className="w-10 h-10 rounded-full bg-foreground text-background flex items-center justify-center"
           >
             <Plus size={20} />
           </Link>
