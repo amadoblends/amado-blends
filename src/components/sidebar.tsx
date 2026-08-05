@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Home,
@@ -17,8 +18,6 @@ import {
   Images,
   LogOut,
   Search,
-  PanelLeftClose,
-  PanelLeftOpen,
   Moon,
   Sun,
   Menu,
@@ -46,7 +45,13 @@ const links = [
 const STORAGE_KEY = "sidebarPinned.v1";
 const HIDDEN_KEY = "sidebarHidden.v1";
 
-export function Sidebar() {
+export function Sidebar({
+  logoUrl = null,
+  businessName = "Amado Blends",
+}: {
+  logoUrl?: string | null;
+  businessName?: string;
+}) {
   const pathname = usePathname();
   const [pinned, setPinned] = useState(true);
   const [hidden, setHidden] = useState(false);
@@ -76,18 +81,6 @@ export function Sidebar() {
     } catch {
       // ignore
     }
-  }
-
-  function togglePinned() {
-    setPinned((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(STORAGE_KEY, String(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
   }
 
   // Collapsed rail widens while the pointer is over it
@@ -130,22 +123,42 @@ export function Sidebar() {
           !pinned && hovering && "shadow-2xl"
         )}
       >
-        {/* Brand */}
+        {/* Brand — the business logo, not the barber's photo */}
         <div className="flex items-center gap-2.5 px-4 py-5 shrink-0">
-          {/* Monogram stays neutral; orange is only the accent underline */}
           <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center shrink-0 relative overflow-hidden">
-            <span className="text-background font-black text-sm tracking-tight">AB</span>
-            <span className="absolute bottom-0 inset-x-0 h-[3px] bg-brand" />
+            {logoUrl ? (
+              <Image src={logoUrl} alt={businessName} fill sizes="40px" className="object-cover" />
+            ) : (
+              <>
+                <span className="text-background font-black text-sm tracking-tight">
+                  {businessName.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="absolute bottom-0 inset-x-0 h-[3px] bg-brand" />
+              </>
+            )}
           </div>
+
           <div
             className={cn(
-              "min-w-0 transition-opacity duration-150",
+              "min-w-0 flex-1 transition-opacity duration-150",
               expanded ? "opacity-100" : "opacity-0"
             )}
           >
-            <p className="font-bold text-foreground leading-tight truncate">Amado Blends</p>
+            <p className="font-bold text-foreground leading-tight truncate">{businessName}</p>
             <p className="text-xs text-muted truncate">Panel administrativo</p>
           </div>
+
+          {/* Single close control, top-right of the panel */}
+          {expanded && (
+            <button
+              onClick={() => setHiddenPersisted(true)}
+              aria-label="Cerrar menú"
+              title="Cerrar menú"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:bg-background hover:text-foreground transition-colors shrink-0"
+            >
+              <X size={17} />
+            </button>
+          )}
         </div>
 
         {/* Search */}
@@ -225,48 +238,6 @@ export function Sidebar() {
               )}
             >
               {theme === "dark" ? "Modo claro" : "Modo oscuro"}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setHiddenPersisted(true)}
-            title="Ocultar menú"
-            className={cn(
-              "w-full flex items-center gap-3 h-10 rounded-xl text-sm font-medium text-muted hover:bg-background transition-colors",
-              expanded ? "px-3" : "justify-center px-0"
-            )}
-          >
-            <X size={18} className="shrink-0" />
-            <span
-              className={cn(
-                "truncate transition-opacity duration-150",
-                expanded ? "opacity-100" : "opacity-0 w-0"
-              )}
-            >
-              Ocultar menú
-            </span>
-          </button>
-
-          <button
-            onClick={togglePinned}
-            title={pinned ? "Colapsar menú" : "Fijar menú abierto"}
-            className={cn(
-              "w-full flex items-center gap-3 h-10 rounded-xl text-sm font-medium text-muted hover:bg-background transition-colors",
-              expanded ? "px-3" : "justify-center px-0"
-            )}
-          >
-            {pinned ? (
-              <PanelLeftClose size={18} className="shrink-0" />
-            ) : (
-              <PanelLeftOpen size={18} className="shrink-0" />
-            )}
-            <span
-              className={cn(
-                "truncate transition-opacity duration-150",
-                expanded ? "opacity-100" : "opacity-0 w-0"
-              )}
-            >
-              {pinned ? "Colapsar" : "Fijar abierto"}
             </span>
           </button>
 

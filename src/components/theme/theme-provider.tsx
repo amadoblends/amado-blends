@@ -5,12 +5,26 @@ import { saveTheme } from "@/lib/actions/theme";
 
 export type Theme = "dark" | "light";
 const STORAGE_KEY = "adminTheme.v1";
+const SYSTEM_KEY = "adminThemeSystem.v1";
 
 const ThemeContext = createContext<{
   theme: Theme;
+  followSystem: boolean;
   setTheme: (t: Theme) => void;
+  setFollowSystem: (v: boolean) => void;
   toggle: () => void;
-}>({ theme: "dark", setTheme: () => {}, toggle: () => {} });
+}>({
+  theme: "dark",
+  followSystem: false,
+  setTheme: () => {},
+  setFollowSystem: () => {},
+  toggle: () => {},
+});
+
+function systemTheme(): Theme {
+  if (typeof window === "undefined") return "dark";
+  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
 
 export function ThemeProvider({
   initialTheme,
@@ -20,6 +34,28 @@ export function ThemeProvider({
   children: React.ReactNode;
 }) {
   const [theme, setThemeState] = useState<Theme>(initialTheme);
+  const [followSystem, setFollowSystemState] = useState(false);
+
+  // Restore the "follow system" choice, which lives only on the device
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(SYSTEM_KEY) === "true") {
+        setFollowSystemState(true);
+        setThemeState(systemTheme());
+      }
+    } catch {
+      // storage blocked — stick with the account value
+    }
+  }, []);
+
+  // Track OS changes while "system" is selected
+  useEffect(() => {
+    if (!followSystem || typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const onChange = () => setThemeState(mq.matches ? "light" : "dark");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [followSystem]);
 
   // Reflect on <html> so every CSS variable swaps at once
   useEffect(() => {
@@ -38,12 +74,36 @@ export function ThemeProvider({
     saveTheme(next);
   }, []);
 
+  const setFollowSystem = useCallback((value: boolean) => {
+    setFollowSystemState(value);
+    try {
+      localStorage.setItem(SYSTEM_KEY, String(value));
+    } catch {
+      // ignore
+    }
+    if (value) {
+      const next = systemTheme();
+      setThemeState(next);
+      try {
+        localStorage.setItem(STORAGE_KEY, next);
+      } catch {
+        // ignore
+      }
+      saveTheme(next);
+    }
+  }, []);
+
   const toggle = useCallback(() => {
+    setFollowSystem(false);
     setTheme(theme === "dark" ? "light" : "dark");
-  }, [theme, setTheme]);
+  }, [theme, setTheme, setFollowSystem]);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggle }}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider
+      value={{ theme, followSystem, setTheme, setFollowSystem, toggle }}
+    >
+      {children}
+    </ThemeContext.Provider>
   );
 }
 

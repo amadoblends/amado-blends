@@ -2,11 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions/auth";
 import { Avatar } from "@/components/ui/avatar";
 import { BackButton } from "@/components/ui/back-button";
+import { ThemePicker } from "@/components/theme/theme-picker";
 import Link from "next/link";
 import {
   Package,
   Scissors,
   Images,
+  Store,
   LogOut,
   ChevronRight,
   ShieldCheck,
@@ -23,6 +25,7 @@ const menu = [
   { href: "/servicios", label: "Servicios", icon: Scissors },
   { href: "/promociones", label: "Promociones", icon: BadgePercent },
   { href: "/carrusel", label: "Carrusel del cliente", icon: Images },
+  { href: "/negocio", label: "Negocio y logo", icon: Store },
   { href: "/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
 ];
 
@@ -67,6 +70,8 @@ export default async function MorePage() {
           </Link>
         ))}
       </div>
+
+      <ThemePicker />
 
       <div className="bg-surface rounded-2xl border border-border p-4 flex items-start gap-3">
         <ShieldCheck size={20} className="text-success shrink-0 mt-0.5" />

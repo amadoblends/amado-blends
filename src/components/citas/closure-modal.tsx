@@ -130,7 +130,7 @@ export function ClosureModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Cerrar días">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-3.5">
         {/* Range */}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Desde">
@@ -193,14 +193,14 @@ export function ClosureModal({
         {/* Reason */}
         <div>
           <label className="text-sm font-medium text-foreground mb-1.5 block">Motivo</label>
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-1">
             {CLOSURE_REASONS.map((r) => (
               <button
                 key={r.value}
                 type="button"
                 onClick={() => setReason(r.value)}
                 className={cn(
-                  "h-14 rounded-xl border text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 px-1 transition-colors",
+                  "h-[52px] rounded-xl border text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 px-1 transition-colors",
                   reason === r.value
                     ? "bg-foreground border-foreground text-background"
                     : "border-border bg-background text-muted"
@@ -268,7 +268,7 @@ export function ClosureModal({
         )}
 
         {/* Announcement */}
-        <div className="bg-background rounded-xl border border-border p-3 space-y-3">
+        <div className="bg-background rounded-xl border border-border p-3 space-y-2.5">
           <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
             <Megaphone size={15} className="text-brand" />
             ¿Anunciar este cierre a tus clientes?
@@ -345,7 +345,7 @@ export function ClosureModal({
         <button
           type="submit"
           disabled={isPending || hasConflicts || checking}
-          className="w-full bg-brand text-white font-semibold py-3 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-40 flex items-center justify-center gap-2"
+          className="w-full bg-brand text-white font-bold h-12 rounded-xl active:scale-[0.98] transition-transform disabled:opacity-40 flex items-center justify-center gap-2 text-sm"
         >
           {isPending ? <Loader2 size={16} className="animate-spin" /> : <CalendarOff size={16} />}
           {hasConflicts ? "Resuelve las citas primero" : "Cerrar estos días"}
@@ -354,7 +354,7 @@ export function ClosureModal({
         <style jsx global>{`
           .form-input {
             width: 100%;
-            padding: 0.75rem 1rem;
+            padding: 0.6rem 0.85rem;
             border-radius: 0.75rem;
             border: 1px solid var(--border);
             background: var(--surface);

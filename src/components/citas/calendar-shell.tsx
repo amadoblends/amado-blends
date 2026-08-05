@@ -8,6 +8,7 @@ import { CalendarPlus, UserPlus, Users, Lock, X } from "lucide-react";
 import { DayTimeline } from "./timeline";
 import { AppointmentWizard, type ServiceOption } from "./wizard";
 import { BlockHoursModal } from "./block-hours";
+import { BlockHourQuick } from "./block-hour-quick";
 import { ClosureModal } from "./closure-modal";
 import { CalendarToolbar, type CalendarView } from "./calendar-toolbar";
 import { WeekView, MonthView, YearView, closureFor } from "./calendar-views";
@@ -52,6 +53,8 @@ export function CalendarShell({
   // Tapping an empty slot opens a small menu with the seed date/time
   const [slot, setSlot] = useState<{ date: string; time: string } | null>(null);
   const [wizardSeed, setWizardSeed] = useState<{ date: string; time: string } | null>(null);
+  // Blocking a slot picked on the calendar keeps its date and start time
+  const [quickBlock, setQuickBlock] = useState<{ date: string; time: string } | null>(null);
 
   const todaysClosure = closureFor(date, closures);
 
@@ -152,10 +155,11 @@ export function CalendarShell({
           <SlotAction
             icon={<Lock size={19} className="text-foreground" />}
             title="Bloquear esta hora"
-            hint="Nadie podrá reservarla"
+            hint={slot ? `Desde las ${slot.time}` : "Nadie podrá reservarla"}
             onClick={() => {
+              // Carry the tapped slot straight through — no re-picking
+              setQuickBlock(slot);
               setSlot(null);
-              setBlockOpen(true);
             }}
           />
           <button
@@ -180,12 +184,23 @@ export function CalendarShell({
         defaultTime={wizardSeed?.time}
       />
 
+      {/* Toolbar version: pick any hours of the day */}
       <BlockHoursModal
         open={blockOpen}
         onClose={() => setBlockOpen(false)}
-        dateStr={slot?.date ?? dateStr}
+        dateStr={dateStr}
         dayAvail={dayAvail}
       />
+
+      {/* Slot version: date and start time already known */}
+      {quickBlock && (
+        <BlockHourQuick
+          open
+          onClose={() => setQuickBlock(null)}
+          dateStr={quickBlock.date}
+          startTime={quickBlock.time}
+        />
+      )}
 
       <ClosureModal
         open={closureOpen}

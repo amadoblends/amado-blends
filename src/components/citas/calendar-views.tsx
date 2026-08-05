@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, format,
@@ -44,6 +45,40 @@ function fmtTime(mins: number) {
   const p = h >= 12 ? "PM" : "AM";
   const dh = h % 12 === 0 ? 12 : h % 12;
   return `${dh}:${String(m).padStart(2, "0")} ${p}`;
+}
+
+/** Client photo, or their initials when there isn't one. */
+function MiniAvatar({
+  name,
+  url,
+  color,
+}: {
+  name: string;
+  url: string | null;
+  color: string;
+}) {
+  const initials = name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+
+  return (
+    <span
+      className="w-3.5 h-3.5 rounded-full overflow-hidden shrink-0 relative flex items-center justify-center ring-1 ring-white/50"
+      style={{ background: url ? undefined : color }}
+    >
+      {url ? (
+        <Image src={url} alt="" fill sizes="14px" className="object-cover" />
+      ) : (
+        <span className="text-white font-bold" style={{ fontSize: 6 }}>
+          {initials}
+        </span>
+      )}
+    </span>
+  );
 }
 
 /** Closure covering a given day, if any. */
@@ -215,16 +250,26 @@ export function WeekView({
                   const s = localMins(a.starts_at);
                   const dur =
                     (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000;
-                  const height = Math.max((dur / 60) * HOUR_H - 2, 20);
+                  const height = Math.max((dur / 60) * HOUR_H - 2, 22);
                   const past = new Date(a.ends_at) < new Date();
+                  const name = displayAppointmentName(
+                    a.client.full_name,
+                    a.guest_name,
+                    a.guest_relationship
+                  );
+                  // Progressive detail: only show what actually fits
+                  const showName = height >= 30;
+                  const showService = height >= 56;
+                  const showAvatar = height >= 44;
 
                   return (
                     <Link
                       key={a.id}
                       href={`/citas/${a.id}`}
+                      title={`${fmtTime(s)} · ${name} · ${a.service.name}`}
                       className={cn(
-                        "absolute left-0.5 right-0.5 rounded-md px-1.5 py-0.5 overflow-hidden active:opacity-75",
-                        past && a.status !== "completada" && "opacity-60"
+                        "absolute left-0.5 right-0.5 rounded-md px-1 py-0.5 overflow-hidden flex flex-col active:opacity-75",
+                        past && a.status !== "completada" && "opacity-55 saturate-50"
                       )}
                       style={{
                         top: ((s - dayStart) / 60) * HOUR_H,
@@ -234,19 +279,31 @@ export function WeekView({
                       }}
                     >
                       <p
-                        className="text-[9px] font-bold leading-tight truncate"
+                        className="text-[9px] font-bold leading-none truncate shrink-0"
                         style={{ color: a.service.color }}
                       >
                         {fmtTime(s)}
                       </p>
-                      {height > 26 && (
-                        <p className="text-[10px] font-semibold text-foreground truncate leading-tight">
-                          {displayAppointmentName(
-                            a.client.full_name,
-                            a.guest_name,
-                            a.guest_relationship
+
+                      {showName && (
+                        <div className="flex items-center gap-1 min-w-0 mt-0.5">
+                          {showAvatar && (
+                            <MiniAvatar
+                              name={a.guest_name ?? a.client.full_name}
+                              url={a.guest_name ? null : a.client.avatar_url}
+                              color={a.service.color}
+                            />
                           )}
-                        </p>
+                          <span className="text-[10px] font-semibold text-foreground truncate leading-tight min-w-0">
+                            {name}
+                          </span>
+                        </div>
+                      )}
+
+                      {showService && (
+                        <span className="text-[9px] text-muted truncate leading-tight mt-px">
+                          {a.service.name} · {Math.round(dur)}m
+                        </span>
                       )}
                     </Link>
                   );
