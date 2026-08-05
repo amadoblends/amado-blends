@@ -1,90 +1,93 @@
-import { format, startOfWeek, addDays } from "date-fns";
-import { Bell } from "lucide-react";
-import Link from "next/link";
+import {
+  format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
+  startOfYear, endOfYear, startOfDay, endOfDay, addDays,
+} from "date-fns";
 import {
   getAppointmentsForDay,
+  getAppointmentsInRange,
   getAppointmentStarts,
   getBlockedTimesForDay,
+  getClosures,
   autoCompletePastAppointments,
 } from "@/lib/data/appointments";
 import { getAvailability, getBookingSettings } from "@/lib/data/availability";
 import { createClient } from "@/lib/supabase/server";
 import { DateStrip } from "@/components/citas/date-strip";
-import { DayNav } from "@/components/citas/day-nav";
-import { DayCitasShell } from "@/components/citas/day-shell";
-import { BackButton } from "@/components/ui/back-button";
+import { CalendarShell } from "@/components/citas/calendar-shell";
+import type { CalendarView } from "@/components/citas/calendar-toolbar";
+
+function rangeFor(view: CalendarView, date: Date): [Date, Date] {
+  switch (view) {
+    case "week":
+      return [startOfWeek(date, { weekStartsOn: 1 }), endOfWeek(date, { weekStartsOn: 1 })];
+    case "month":
+      return [
+        startOfWeek(startOfMonth(date), { weekStartsOn: 1 }),
+        endOfWeek(endOfMonth(date), { weekStartsOn: 1 }),
+      ];
+    case "year":
+      return [startOfYear(date), endOfYear(date)];
+    default:
+      return [startOfDay(date), endOfDay(date)];
+  }
+}
 
 export default async function CitasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; view?: string }>;
 }) {
   const params = await searchParams;
   const dateStr = params.date ?? format(new Date(), "yyyy-MM-dd");
   const date = new Date(dateStr + "T00:00:00");
-
-  const weekStart = startOfWeek(date, { weekStartsOn: 1 });
-  const weekEnd = addDays(weekStart, 5);
+  const view = (["day", "week", "month", "year"].includes(params.view ?? "")
+    ? params.view
+    : "day") as CalendarView;
 
   const supabase = await createClient();
-
-  // Mark past appointments as completed before rendering
   await autoCompletePastAppointments();
+
+  const [rangeStart, rangeEnd] = rangeFor(view, date);
+  const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+  const weekEnd = addDays(weekStart, 5);
 
   const [
     appointments,
     appointmentStarts,
     availability,
-    bookingSettings,
     blockedTimes,
+    closures,
     { data: servicesData },
   ] = await Promise.all([
-    getAppointmentsForDay(date),
-    getAppointmentStarts(weekStart, weekEnd),
+    // The day view has its own richer query; other views use the range one
+    view === "day" ? getAppointmentsForDay(date) : getAppointmentsInRange(rangeStart, rangeEnd),
+    view === "day" ? getAppointmentStarts(weekStart, weekEnd) : Promise.resolve([]),
     getAvailability(),
-    getBookingSettings(),
     getBlockedTimesForDay(date),
-    supabase
-      .from("services")
-      .select("id, name, duration_minutes, price, color")
-      .order("name"),
+    getClosures(),
+    supabase.from("services").select("id, name, duration_minutes, price, color").order("name"),
   ]);
 
-  const activeWeekdays = availability.filter((d) => d.is_active).map((d) => d.weekday);
-
-  // Availability config for the selected day
-  const weekday = date.getDay();
-  const dayAvail = availability.find((d) => d.weekday === weekday && d.is_active) ?? null;
+  const dayAvail =
+    availability.find((d) => d.weekday === date.getDay() && d.is_active) ?? null;
 
   return (
     <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-4">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <BackButton />
-          <h1 className="text-xl font-bold text-foreground">Citas</h1>
-        </div>
-        <Link
-          href="/notificaciones"
-          className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center"
-        >
-          <Bell size={18} />
-        </Link>
-      </header>
+      {/* The week strip only makes sense alongside the single-day timeline */}
+      {view === "day" && (
+        <DateStrip selected={dateStr} appointmentStarts={appointmentStarts} />
+      )}
 
-      <DateStrip selected={dateStr} appointmentStarts={appointmentStarts} />
-      <DayNav
-        date={dateStr}
-        activeWeekdays={activeWeekdays}
-        bookingWindowDays={bookingSettings.booking_window_days}
-      />
-
-      <DayCitasShell
+      <CalendarShell
+        view={view}
+        date={date}
+        dateStr={dateStr}
         appointments={appointments}
         dayAvail={dayAvail}
         availability={availability}
         services={servicesData ?? []}
-        dateStr={dateStr}
         blockedTimes={blockedTimes}
+        closures={closures}
       />
     </div>
   );

@@ -21,6 +21,8 @@ import {
   PanelLeftOpen,
   Moon,
   Sun,
+  Menu,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/actions/auth";
@@ -42,10 +44,12 @@ const links = [
 ];
 
 const STORAGE_KEY = "sidebarPinned.v1";
+const HIDDEN_KEY = "sidebarHidden.v1";
 
 export function Sidebar() {
   const pathname = usePathname();
   const [pinned, setPinned] = useState(true);
+  const [hidden, setHidden] = useState(false);
   const [hovering, setHovering] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { theme, toggle: toggleTheme } = useTheme();
@@ -58,10 +62,21 @@ export function Sidebar() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved !== null) setPinned(saved === "true");
+      const savedHidden = localStorage.getItem(HIDDEN_KEY);
+      if (savedHidden !== null) setHidden(savedHidden === "true");
     } catch {
       // storage blocked — fall back to expanded
     }
   }, []);
+
+  function setHiddenPersisted(next: boolean) {
+    setHidden(next);
+    try {
+      localStorage.setItem(HIDDEN_KEY, String(next));
+    } catch {
+      // ignore
+    }
+  }
 
   function togglePinned() {
     setPinned((prev) => {
@@ -77,6 +92,22 @@ export function Sidebar() {
 
   // Collapsed rail widens while the pointer is over it
   const expanded = pinned || hovering;
+
+  // Fully hidden: only the hamburger stays, on tablet and desktop alike
+  if (hidden) {
+    return (
+      <>
+        <button
+          onClick={() => setHiddenPersisted(false)}
+          aria-label="Abrir menú"
+          className="hidden md:flex fixed top-4 left-4 z-50 w-11 h-11 rounded-xl bg-surface border border-border shadow-md items-center justify-center active:bg-background"
+        >
+          <Menu size={19} className="text-foreground" />
+        </button>
+        <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -194,6 +225,25 @@ export function Sidebar() {
               )}
             >
               {theme === "dark" ? "Modo claro" : "Modo oscuro"}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setHiddenPersisted(true)}
+            title="Ocultar menú"
+            className={cn(
+              "w-full flex items-center gap-3 h-10 rounded-xl text-sm font-medium text-muted hover:bg-background transition-colors",
+              expanded ? "px-3" : "justify-center px-0"
+            )}
+          >
+            <X size={18} className="shrink-0" />
+            <span
+              className={cn(
+                "truncate transition-opacity duration-150",
+                expanded ? "opacity-100" : "opacity-0 w-0"
+              )}
+            >
+              Ocultar menú
             </span>
           </button>
 

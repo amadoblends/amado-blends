@@ -22,6 +22,8 @@ export interface ProductData {
   category?: ProductCategory;
   is_visible_for_sale?: boolean;
   available_for_services?: boolean;
+  description?: string | null;
+  purchase_url?: string | null;
 }
 
 export function ProductModal({
@@ -88,6 +90,17 @@ export function ProductModal({
             defaultValue={product?.name}
             className="form-input"
             placeholder="Ej. Pomada mate"
+          />
+        </Field>
+
+        <Field label="Descripción (opcional)">
+          <textarea
+            name="description"
+            rows={2}
+            maxLength={500}
+            defaultValue={product?.description ?? ""}
+            placeholder="Beneficios, uso, ingredientes..."
+            className="form-input resize-none"
           />
         </Field>
 
@@ -164,6 +177,20 @@ export function ProductModal({
             />
           </Field>
         </div>
+
+        <Field label="Enlace de compra online (opcional)">
+          <input
+            type="url"
+            name="purchaseUrl"
+            maxLength={2000}
+            defaultValue={product?.purchase_url ?? ""}
+            placeholder="https://tutienda.com/producto"
+            className="form-input"
+          />
+          <p className="text-xs text-muted mt-1">
+            Si lo dejas vacío, el botón &ldquo;Comprar online&rdquo; no aparece.
+          </p>
+        </Field>
 
         {/* Independent visibility switches */}
         <div className="space-y-2">

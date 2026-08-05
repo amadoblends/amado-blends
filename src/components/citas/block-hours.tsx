@@ -26,15 +26,18 @@ interface BlockedRow {
   ends_at: string;
 }
 
-export function BlockHoursButton({
+export function BlockHoursModal({
+  open,
+  onClose,
   dateStr,
   dayAvail,
 }: {
+  open: boolean;
+  onClose: () => void;
   dateStr: string;
   dayAvail: AvailabilityDay | null;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [blocked, setBlocked] = useState<BlockedRow[]>([]);
   const [busyApts, setBusyApts] = useState<{ start: number; end: number }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -75,7 +78,8 @@ export function BlockHoursButton({
     if (open) load();
   }, [open, load]);
 
-  if (!dayAvail?.is_active) return null;
+  // Nothing to block on a day that isn't a working day
+  if (!open || !dayAvail?.is_active) return null;
 
   const start = toMins(dayAvail.start_time);
   const end = toMins(dayAvail.end_time);
@@ -131,16 +135,7 @@ export function BlockHoursButton({
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed z-30 bottom-[calc(140px+max(12px,var(--safe-bottom)))] right-4 md:bottom-24 md:right-6 w-11 h-11 rounded-full bg-surface border border-border shadow-md flex items-center justify-center active:scale-95 transition-transform"
-        aria-label="Bloquear horas"
-        title="Bloquear horas"
-      >
-        <Lock size={18} className="text-foreground" />
-      </button>
-
-      <Modal open={open} onClose={() => setOpen(false)} title="Bloquear horas">
+      <Modal open={open} onClose={onClose} title="Bloquear horas">
         <div className="space-y-4">
           <p className="text-sm text-muted">
             Toca las horas que quieras bloquear (puedes elegir varias). Los clientes no podrán

@@ -107,6 +107,7 @@ export function AppointmentWizard({
   services,
   availability,
   defaultDate,
+  defaultTime,
 }: {
   open: boolean;
   onClose: () => void;
@@ -114,14 +115,16 @@ export function AppointmentWizard({
   services: ServiceOption[];
   availability: AvailabilityDay[];
   defaultDate: string;
+  defaultTime?: string;
 }) {
+  // A slot tapped on the calendar seeds the date and time
   const initData: WizData = {
     clientType: null,
     walkinName: "",
     client: null,
     service: null,
     date: defaultDate,
-    time: "",
+    time: defaultTime ?? "",
   };
 
   const [step, setStep] = useState<Step>("type");
@@ -178,7 +181,7 @@ export function AppointmentWizard({
 
   function reset() {
     setStep("type");
-    setData({ ...initData, date: defaultDate });
+    setData({ ...initData, date: defaultDate, time: defaultTime ?? "" });
     setSearchQ("");
     setSearchRes([]);
     setCalCursor(startOfMonth(new Date(defaultDate + "T00:00:00")));

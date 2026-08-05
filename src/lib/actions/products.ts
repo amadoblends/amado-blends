@@ -13,6 +13,15 @@ const productSchema = z.object({
   criticalStockThreshold: z.coerce.number().int().min(0).max(100000),
   imageUrl: z.string().url().max(2000).optional().or(z.literal("")),
   category: z.enum(["dry", "wet"]).optional().or(z.literal("")),
+  description: z.string().trim().max(500).optional().or(z.literal("")),
+  // Empty means "no link"; otherwise it must be a real http(s) URL
+  purchaseUrl: z
+    .string()
+    .trim()
+    .url()
+    .refine((u) => /^https?:\/\//i.test(u), "Debe empezar con http:// o https://")
+    .optional()
+    .or(z.literal("")),
   visibleForSale: z.enum(["true", "false"]).default("true"),
   availableForServices: z.enum(["true", "false"]).default("true"),
 });
@@ -32,9 +41,19 @@ export async function upsertProduct(productId: string | null, formData: FormData
     category: formData.get("category") || "",
     visibleForSale: formData.get("visibleForSale") || "true",
     availableForServices: formData.get("availableForServices") || "true",
+    description: formData.get("description") || "",
+    purchaseUrl: formData.get("purchaseUrl") || "",
   });
 
-  if (!parsed.success) return { ok: false, error: "Revisa los datos del producto." };
+  if (!parsed.success) {
+    const urlIssue = parsed.error.issues.find((i) => i.path[0] === "purchaseUrl");
+    return {
+      ok: false,
+      error: urlIssue
+        ? "El enlace de compra debe empezar con http:// o https://"
+        : "Revisa los datos del producto.",
+    };
+  }
 
   const payload = {
     name: parsed.data.name,
@@ -46,6 +65,8 @@ export async function upsertProduct(productId: string | null, formData: FormData
     category: parsed.data.category || null,
     is_visible_for_sale: parsed.data.visibleForSale === "true",
     available_for_services: parsed.data.availableForServices === "true",
+    description: parsed.data.description || null,
+    purchase_url: parsed.data.purchaseUrl || null,
   };
 
   const query = productId

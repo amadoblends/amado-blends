@@ -343,7 +343,7 @@ function PostModal({
           <label className="text-sm font-medium text-foreground mb-1.5 block">
             Tipo de publicación
           </label>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
             {CAROUSEL_TYPES.map((t) => (
               <button
                 key={t.value}
@@ -363,7 +363,7 @@ function PostModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Aparece desde">
             <input
               type="date"
@@ -382,7 +382,7 @@ function PostModal({
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Texto del botón">
             <input
               name="buttonLabel"

@@ -122,6 +122,75 @@ export interface BlockedRange {
   ends_at: string;
 }
 
+export interface ClosureRange {
+  id: string;
+  starts_on: string;
+  ends_on: string;
+  all_day: boolean;
+  start_time: string | null;
+  end_time: string | null;
+  reason: string;
+  description: string | null;
+}
+
+export async function getClosures(): Promise<ClosureRange[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("closures")
+    .select("id, starts_on, ends_on, all_day, start_time, end_time, reason, description")
+    .order("starts_on");
+  // Table may not exist yet if migration 17 hasn't run
+  if (error || !data) return [];
+  return data;
+}
+
+/** Appointments across an arbitrary range, for week/month/year calendar views. */
+export async function getAppointmentsInRange(
+  start: Date,
+  end: Date
+): Promise<AppointmentRow[]> {
+  const supabase = await createClient();
+  // Widen ±14h: the server runs in UTC while the barber reads local days
+  const from = new Date(startOfDay(start).getTime() - 14 * 3600_000);
+  const to = new Date(endOfDay(end).getTime() + 14 * 3600_000);
+
+  const { data, error } = await supabase
+    .from("appointments")
+    .select(
+      "id, starts_at, ends_at, status, price, guest_name, guest_relationship, clients(id, full_name, avatar_url), services(id, name, color), appointment_products(quantity, products(name, image_url)), appointment_guests(full_name)"
+    )
+    .gte("starts_at", from.toISOString())
+    .lte("starts_at", to.toISOString())
+    .neq("status", "cancelada")
+    .order("starts_at", { ascending: true })
+    .limit(2000);
+
+  if (error || !data) return [];
+
+  return data.map((a) => ({
+    id: a.id,
+    starts_at: a.starts_at,
+    ends_at: a.ends_at,
+    status: a.status,
+    price: Number(a.price),
+    client: a.clients as unknown as AppointmentRow["client"],
+    service: a.services as unknown as AppointmentRow["service"],
+    products: ((a.appointment_products as unknown as {
+      quantity: number;
+      products: { name: string; image_url: string | null };
+    }[]) ?? []).map((ap) => ({
+      quantity: ap.quantity,
+      name: ap.products?.name ?? "",
+      image_url: ap.products?.image_url ?? null,
+    })),
+    guests: ((a.appointment_guests as unknown as { full_name: string }[]) ?? []).map(
+      (g) => g.full_name
+    ),
+    guest_name: a.guest_name ?? null,
+    guest_relationship: a.guest_relationship ?? null,
+  }));
+}
+
 export async function getBlockedTimesForDay(date: Date): Promise<BlockedRange[]> {
   const supabase = await createClient();
   const from = new Date(startOfDay(date).getTime() - 14 * 3600_000);
