@@ -4,7 +4,9 @@ import { useState, useCallback, useEffect, useRef, useTransition, useMemo } from
 import { useRouter } from "next/navigation";
 import { format, addDays, subDays } from "date-fns";
 import { es } from "date-fns/locale";
-import { CalendarPlus, UserPlus, Users, Lock, X, Plus, Clock, CalendarOff } from "lucide-react";
+import {
+  CalendarPlus, UserPlus, Users, Lock, X, Plus, Clock, CalendarOff, Info,
+} from "lucide-react";
 import { DayTimeline } from "./timeline";
 import { AppointmentWizard, type ServiceOption } from "./wizard";
 import { BlockHoursModal } from "./block-hours";
@@ -15,15 +17,18 @@ import { WeekView, MonthView, YearView, closureFor } from "./calendar-views";
 import { DayStripScroller } from "./day-strip-scroller";
 import { AppointmentSheet } from "./appointment-sheet";
 import { RescheduleModal } from "./reschedule-modal";
+import { FullCalendarSheet } from "./full-calendar-sheet";
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
 import { SearchModal } from "@/components/search-modal";
 import { Modal } from "@/components/ui/modal";
 import { reasonLabel } from "@/lib/closures";
 import { cn } from "@/lib/utils";
+import type { SlotVerdict } from "@/lib/slot-availability";
 import type {
   AppointmentRow,
   BlockedRange,
   ClosureRange,
+  LiteAppointment,
 } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 
@@ -35,6 +40,7 @@ export function CalendarShell({
   date,
   dateStr,
   appointments,
+  liteAppointments = [],
   dayAvail,
   availability,
   services,
@@ -46,6 +52,8 @@ export function CalendarShell({
   date: Date;
   dateStr: string;
   appointments: AppointmentRow[];
+  /** Month and year views only need name, colour and status. */
+  liteAppointments?: LiteAppointment[];
   dayAvail: AvailabilityDay | null;
   availability: AvailabilityDay[];
   services: ServiceOption[];
@@ -60,6 +68,9 @@ export function CalendarShell({
   const [blockOpen, setBlockOpen] = useState(false);
   const [closureOpen, setClosureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [fullCalendarOpen, setFullCalendarOpen] = useState(false);
+  // Why a tapped hour can't take an appointment
+  const [rejected, setRejected] = useState<SlotVerdict | null>(null);
 
   // Tapping an empty slot opens a small menu with the seed date/time
   const [slot, setSlot] = useState<{ date: string; time: string } | null>(null);
@@ -112,10 +123,16 @@ export function CalendarShell({
     [navigate, pendingDate]
   );
 
-  const handleToday = useCallback(() => {
-    setVisibleMonth(undefined);
-    navigate(format(new Date(), "yyyy-MM-dd"), pendingView);
-  }, [navigate, pendingView]);
+  // The header's calendar button opens the whole calendar, not just "today"
+  const handleOpenFullCalendar = useCallback(() => setFullCalendarOpen(true), []);
+
+  const handleFullCalendarPick = useCallback(
+    (nextDate: string, nextView: CalendarView) => {
+      setVisibleMonth(undefined);
+      navigate(nextDate, nextView);
+    },
+    [navigate]
+  );
 
   // ── Swipe left / right on the day view ───────────────────────────────────
   const touch = useRef<{ x: number; y: number; locked: boolean | null } | null>(null);
@@ -168,9 +185,18 @@ export function CalendarShell({
     (d: string, t: string) => setSlot({ date: d, time: t }),
     []
   );
+  const handleSlotRejected = useCallback((v: SlotVerdict) => setRejected(v), []);
   const handleSelect = useCallback((a: AppointmentRow) => setSelected(a), []);
 
   const todaysClosure = closureFor(date, closures);
+
+  // A gap has to fit at least the shortest service to be worth offering
+  const shortestServiceMins = useMemo(() => {
+    const durations = services
+      .map((s) => s.duration_minutes)
+      .filter((d): d is number => typeof d === "number" && d > 0);
+    return durations.length ? Math.min(...durations) : 15;
+  }, [services]);
 
   // The server is still catching up, so drive the header off the local value
   const headerDate = useMemo(
@@ -197,7 +223,7 @@ export function CalendarShell({
         displayDate={pendingView === "day" ? visibleMonth : undefined}
         onNavigate={handleNavigate}
         onSearch={handleSearch}
-        onToday={handleToday}
+        onToday={handleOpenFullCalendar}
       />
 
       {/* Day strip sits between the header and the actions */}
@@ -254,7 +280,11 @@ export function CalendarShell({
               dayAvail={dayAvail}
               dateStr={dateStr}
               blockedTimes={blockedTimes}
+              closure={todaysClosure}
+              shortestServiceMins={shortestServiceMins}
               onSelect={handleSelect}
+              onSlotPick={handleSlotClick}
+              onSlotRejected={handleSlotRejected}
             />
           )}
 
@@ -265,21 +295,23 @@ export function CalendarShell({
               blockedTimes={blockedTimes}
               closures={closures}
               availability={availability}
+              shortestServiceMins={shortestServiceMins}
               onSlotClick={handleSlotClick}
+              onSlotRejected={handleSlotRejected}
             />
           )}
 
           {view === "month" && (
             <MonthView
               date={date}
-              appointments={appointments}
+              appointments={liteAppointments}
               closures={closures}
               availability={availability}
             />
           )}
 
           {view === "year" && (
-            <YearView date={date} appointments={appointments} closures={closures} />
+            <YearView date={date} appointments={liteAppointments} closures={closures} />
           )}
         </div>
       </div>
@@ -345,12 +377,17 @@ export function CalendarShell({
         defaultTime={wizardSeed?.time}
       />
 
-      {/* Toolbar version: pick any hours of the day */}
+      {/*
+       * Toolbar version: pick any hours of the day. It reuses the data the
+       * calendar already has, so it opens with the grid drawn.
+       */}
       <BlockHoursModal
         open={blockOpen}
         onClose={() => setBlockOpen(false)}
         dateStr={dateStr}
         dayAvail={dayAvail}
+        appointments={appointments}
+        blockedTimes={blockedTimes}
       />
 
       {/* Slot version: date and start time already known */}
@@ -370,6 +407,55 @@ export function CalendarShell({
       />
 
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      {/* Full calendar: any date, and which view to land in */}
+      <FullCalendarSheet
+        open={fullCalendarOpen}
+        onClose={() => setFullCalendarOpen(false)}
+        selected={pendingDate}
+        view={pendingView}
+        dayCounts={dayCounts}
+        closures={closures}
+        onPick={handleFullCalendarPick}
+      />
+
+      {/* Why that hour can't take an appointment */}
+      <Modal
+        open={rejected !== null}
+        onClose={() => setRejected(null)}
+        title={rejected?.title ?? ""}
+      >
+        <div className="space-y-4">
+          <div className="flex gap-3">
+            <span className="w-9 h-9 rounded-full bg-warning-light flex items-center justify-center shrink-0">
+              <Info size={17} className="text-warning" />
+            </span>
+            <p className="text-sm text-foreground leading-relaxed pt-1.5">
+              {rejected?.detail}
+            </p>
+          </div>
+
+          {/* A blocked hour is the one case the barber can undo right here */}
+          {rejected?.reason === "blocked" && (
+            <button
+              onClick={() => {
+                setRejected(null);
+                setBlockOpen(true);
+              }}
+              className="w-full h-11 rounded-xl border border-border text-sm font-semibold text-foreground active:bg-background"
+            >
+              Administrar horas bloqueadas
+            </button>
+          )}
+
+          <button
+            onClick={() => setRejected(null)}
+            className="w-full h-11 rounded-xl bg-foreground text-background text-sm font-bold"
+          >
+            Entendido
+          </button>
+        </div>
+      </Modal>
 
       <AppointmentSheet
         appointment={selected}

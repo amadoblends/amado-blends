@@ -1,16 +1,27 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { Lock, Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { AvailabilityDay } from "@/lib/data/availability";
+import type { AppointmentRow, BlockedRange } from "@/lib/data/appointments";
 
 function toMins(t: string) {
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
+}
+function localMins(iso: string) {
+  const d = new Date(iso);
+  return d.getHours() * 60 + d.getMinutes();
+}
+function localDateStr(iso: string) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function fmtSlot(mins: number) {
   const h = Math.floor(mins / 60);
@@ -20,178 +31,235 @@ function fmtSlot(mins: number) {
   return `${dh}:${String(m).padStart(2, "0")} ${p}`;
 }
 
-interface BlockedRow {
-  id: string;
-  starts_at: string;
-  ends_at: string;
-}
+type SlotState = "free" | "blocked" | "busy" | "past";
 
+/**
+ * Toggle blocks on the selected day.
+ *
+ * It used to open empty and fire two queries before drawing anything. The
+ * calendar has already loaded that day's appointments and blocks, so those are
+ * passed straight in: the grid is on screen the moment the modal opens, and
+ * each toggle paints optimistically while the write goes out in the
+ * background.
+ */
 export function BlockHoursModal({
   open,
   onClose,
   dateStr,
   dayAvail,
+  appointments,
+  blockedTimes,
 }: {
   open: boolean;
   onClose: () => void;
   dateStr: string;
   dayAvail: AvailabilityDay | null;
+  appointments: AppointmentRow[];
+  blockedTimes: BlockedRange[];
 }) {
   const router = useRouter();
-  const [blocked, setBlocked] = useState<BlockedRow[]>([]);
-  const [busyApts, setBusyApts] = useState<{ start: number; end: number }[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [pendingSlot, setPendingSlot] = useState<number | null>(null);
+  const [, startTransition] = useTransition();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const supabase = createClient();
-    const [y, mo, d] = dateStr.split("-").map(Number);
-    const dayStart = new Date(y, mo - 1, d, 0, 0, 0);
-    const dayEnd = new Date(y, mo - 1, d, 23, 59, 59);
+  // Local mirror so a tap lands instantly; re-seeded whenever the page revalidates
+  const [blocks, setBlocks] = useState<BlockedRange[]>(blockedTimes);
+  const [saving, setSaving] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-    const [{ data: blockedRows }, { data: apts }] = await Promise.all([
-      supabase
-        .from("blocked_times")
-        .select("id, starts_at, ends_at")
-        .lt("starts_at", dayEnd.toISOString())
-        .gt("ends_at", dayStart.toISOString()),
-      supabase
-        .from("appointments")
-        .select("starts_at, ends_at")
-        .neq("status", "cancelada")
-        .lt("starts_at", dayEnd.toISOString())
-        .gt("ends_at", dayStart.toISOString()),
-    ]);
-
-    setBlocked(blockedRows ?? []);
-    setBusyApts(
-      (apts ?? []).map((a) => ({
-        start: new Date(a.starts_at).getTime(),
-        end: new Date(a.ends_at).getTime(),
-      }))
-    );
-    setLoading(false);
-  }, [dateStr]);
-
+  useEffect(() => setBlocks(blockedTimes), [blockedTimes]);
   useEffect(() => {
-    if (open) load();
-  }, [open, load]);
+    if (open) setError(null);
+  }, [open]);
 
-  // Nothing to block on a day that isn't a working day
-  if (!open || !dayAvail?.is_active) return null;
+  const dayBlocks = useMemo(
+    () => blocks.filter((b) => localDateStr(b.starts_at) === dateStr),
+    [blocks, dateStr]
+  );
+  const dayApts = useMemo(
+    () => appointments.filter((a) => localDateStr(a.starts_at) === dateStr),
+    [appointments, dateStr]
+  );
 
-  const start = toMins(dayAvail.start_time);
-  const end = toMins(dayAvail.end_time);
-  const step = dayAvail.slot_minutes;
-  const bS = dayAvail.break_start_time ? toMins(dayAvail.break_start_time) : null;
-  const bE = dayAvail.break_end_time ? toMins(dayAvail.break_end_time) : null;
+  const step = dayAvail?.slot_minutes || 30;
 
-  const slots: number[] = [];
-  for (let t = start; t + step <= end; t += step) {
-    if (bS !== null && bE !== null && t < bE && t + step > bS) continue;
-    slots.push(t);
+  const slots = useMemo(() => {
+    if (!dayAvail?.is_active) return [];
+    const start = toMins(dayAvail.start_time);
+    const end = toMins(dayAvail.end_time);
+    const bS = dayAvail.break_start_time ? toMins(dayAvail.break_start_time) : null;
+    const bE = dayAvail.break_end_time ? toMins(dayAvail.break_end_time) : null;
+
+    const out: number[] = [];
+    for (let t = start; t + step <= end; t += step) {
+      if (bS !== null && bE !== null && t < bE && t + step > bS) continue;
+      out.push(t);
+    }
+    return out;
+  }, [dayAvail, step]);
+
+  if (!open) return null;
+
+  if (!dayAvail?.is_active) {
+    return (
+      <Modal open={open} onClose={onClose} title="Bloquear horas">
+        <p className="text-sm text-muted py-2">
+          Ese día no es laborable, así que no hay horas que bloquear.
+        </p>
+      </Modal>
+    );
   }
+
+  const nowRef = new Date();
+  const todayStr = localDateStr(nowRef.toISOString());
+  const nowMins = nowRef.getHours() * 60 + nowRef.getMinutes();
 
   function slotDate(mins: number) {
     const [y, mo, d] = dateStr.split("-").map(Number);
     return new Date(y, mo - 1, d, Math.floor(mins / 60), mins % 60, 0);
   }
 
-  function blockFor(mins: number): BlockedRow | undefined {
-    const sMs = slotDate(mins).getTime();
-    const eMs = sMs + step * 60000;
-    return blocked.find(
-      (b) => new Date(b.starts_at).getTime() < eMs && new Date(b.ends_at).getTime() > sMs
-    );
+  function blockFor(mins: number): BlockedRange | undefined {
+    return dayBlocks.find((b) => {
+      const s = localMins(b.starts_at);
+      const e = s + (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000;
+      return s < mins + step && e > mins;
+    });
   }
 
-  function hasAppointment(mins: number): boolean {
-    const sMs = slotDate(mins).getTime();
-    const eMs = sMs + step * 60000;
-    return busyApts.some((a) => a.start < eMs && a.end > sMs);
+  function stateOf(mins: number): SlotState {
+    const busy = dayApts.some((a) => {
+      const s = localMins(a.starts_at);
+      const e = s + (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000;
+      return s < mins + step && e > mins;
+    });
+    if (busy) return "busy";
+    if (blockFor(mins)) return "blocked";
+    if (dateStr < todayStr || (dateStr === todayStr && mins < nowMins)) return "past";
+    return "free";
   }
 
   async function toggleSlot(mins: number) {
-    setPendingSlot(mins);
-    const supabase = createClient();
     const existing = blockFor(mins);
+    const snapshot = blocks;
+    setError(null);
+    setSaving(mins);
+
+    const supabase = createClient();
 
     if (existing) {
-      await supabase.from("blocked_times").delete().eq("id", existing.id);
+      // Paint the unblock first, undo it only if the delete fails
+      setBlocks((prev) => prev.filter((b) => b.id !== existing.id));
+      const { error: delErr } = await supabase
+        .from("blocked_times")
+        .delete()
+        .eq("id", existing.id);
+      if (delErr) {
+        setBlocks(snapshot);
+        setError("No se pudo desbloquear esa hora.");
+      }
     } else {
       const startsAt = slotDate(mins);
       const endsAt = new Date(startsAt.getTime() + step * 60000);
-      await supabase.from("blocked_times").insert({
+      const optimistic: BlockedRange = {
+        id: `temp-${mins}`,
         starts_at: startsAt.toISOString(),
         ends_at: endsAt.toISOString(),
         reason: "Bloqueado por el barbero",
-      });
+      };
+      setBlocks((prev) => [...prev, optimistic]);
+
+      const { data, error: insErr } = await supabase
+        .from("blocked_times")
+        .insert({
+          starts_at: startsAt.toISOString(),
+          ends_at: endsAt.toISOString(),
+          reason: "Bloqueado por el barbero",
+        })
+        .select("id, starts_at, ends_at, reason")
+        .single();
+
+      if (insErr || !data) {
+        setBlocks(snapshot);
+        setError("No se pudo bloquear esa hora. ¿Ya hay una cita ahí?");
+      } else {
+        // Swap the placeholder for the real row so a second tap can delete it
+        setBlocks((prev) => prev.map((b) => (b.id === optimistic.id ? data : b)));
+      }
     }
-    await load();
-    setPendingSlot(null);
-    router.refresh();
+
+    setSaving(null);
+    // Refresh the calendar behind the modal without blocking the interface
+    startTransition(() => router.refresh());
   }
 
   return (
-    <>
-      <Modal open={open} onClose={onClose} title="Bloquear horas">
-        <div className="space-y-4">
-          <p className="text-sm text-muted">
-            Toca las horas que quieras bloquear (puedes elegir varias). Los clientes no podrán
-            reservar en esas horas. Toca de nuevo para desbloquear.
+    <Modal open={open} onClose={onClose} title="Bloquear horas">
+      <div className="space-y-3.5">
+        <div>
+          <p className="text-sm font-bold text-foreground capitalize">
+            {format(new Date(dateStr + "T00:00:00"), "EEEE d 'de' MMMM", { locale: es })}
           </p>
-
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 size={20} className="animate-spin text-muted" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {slots.map((t) => {
-                const isBlocked = Boolean(blockFor(t));
-                const hasApt = hasAppointment(t);
-                const isPending = pendingSlot === t;
-                return (
-                  <button
-                    key={t}
-                    disabled={hasApt || isPending}
-                    onClick={() => toggleSlot(t)}
-                    className={cn(
-                      "h-11 rounded-xl text-xs font-semibold border transition-colors flex items-center justify-center gap-1",
-                      hasApt
-                        ? "border-border bg-background text-muted/40 cursor-not-allowed"
-                        : isBlocked
-                          ? "bg-danger border-danger text-white"
-                          : "border-border text-foreground bg-background active:bg-surface"
-                    )}
-                  >
-                    {isPending ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <>
-                        {isBlocked && <Lock size={11} />}
-                        {fmtSlot(t)}
-                      </>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="flex items-center gap-4 text-[11px] text-muted">
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-danger inline-block" /> Bloqueada
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded bg-background border border-border inline-block" />{" "}
-              Libre
-            </span>
-            <span className="flex items-center gap-1 opacity-50">Con cita = no se puede</span>
-          </div>
+          <p className="text-xs text-muted mt-0.5">
+            Toca las horas que quieras bloquear. Toca de nuevo para desbloquear.
+          </p>
         </div>
-      </Modal>
-    </>
+
+        <div className="grid grid-cols-3 gap-2">
+          {slots.map((t) => {
+            const state = stateOf(t);
+            const isSaving = saving === t;
+            const disabled = state === "busy" || state === "past" || isSaving;
+
+            return (
+              <button
+                key={t}
+                disabled={disabled}
+                onClick={() => toggleSlot(t)}
+                title={
+                  state === "busy"
+                    ? "Ya hay una cita en esa hora"
+                    : state === "past"
+                      ? "Esa hora ya pasó"
+                      : undefined
+                }
+                className={cn(
+                  "h-11 rounded-xl text-xs font-bold border transition-colors flex items-center justify-center gap-1",
+                  state === "busy"
+                    ? "border-border bg-background text-muted/40 cursor-not-allowed"
+                    : state === "past"
+                      ? "border-border/60 bg-background text-muted/30 cursor-not-allowed"
+                      : state === "blocked"
+                        ? "bg-danger border-danger text-white"
+                        : "border-border text-foreground bg-background active:bg-surface"
+                )}
+              >
+                {isSaving ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <>
+                    {state === "blocked" && <Lock size={11} />}
+                    <span className="tnum">{fmtSlot(t)}</span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {error && (
+          <p className="text-sm text-danger bg-danger-light rounded-lg px-3 py-2">{error}</p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded bg-danger inline-block" /> Bloqueada
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-3 h-3 rounded bg-background border border-border inline-block" />
+            Libre
+          </span>
+          <span className="opacity-60">Con cita o ya pasada = no se puede</span>
+        </div>
+      </div>
+    </Modal>
   );
 }

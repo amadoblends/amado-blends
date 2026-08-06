@@ -2,15 +2,23 @@
 
 import { useState, useEffect, useMemo, memo } from "react";
 import Image from "next/image";
-import { ShoppingBag, Lock } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Lock, Plus } from "lucide-react";
+import { cn, formatCurrency } from "@/lib/utils";
 import { displayAppointmentName } from "@/lib/guests";
 import { PhotoLightbox } from "@/components/ui/photo-lightbox";
-import type { AppointmentRow, BlockedRange } from "@/lib/data/appointments";
+import { checkSlot, type SlotVerdict } from "@/lib/slot-availability";
+import type { AppointmentRow, BlockedRange, ClosureRange } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 
-// Taller rows so a 30-minute block still fits an avatar plus two lines
-const HOUR_H = 96;
+/*
+ * Duration is expressed by WHERE a block sits on the hour rail, never by how
+ * tall it is: every appointment card is the same size so they stay readable
+ * and comparable. The rail is spaced so a half-hour still leaves a clear gap
+ * between two consecutive cards.
+ */
+const HOUR_H = 124;
+const BLOCK_H = 60;
+const BLOCK_GAP = 5;
 
 function toMins(t: string) {
   const [h, m] = t.split(":").map(Number);
@@ -36,12 +44,17 @@ function localDateStr(iso: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  confirmada: "Confirmada",
+  pendiente: "Pendiente",
+  completada: "Completada",
+  cancelada: "Cancelada",
+  no_show: "No asistió",
+};
+
 /**
- * Minutes since midnight as a *fraction*, refreshed every 15 seconds.
- *
- * Using whole minutes made the line jump a whole row-step at a time; a
- * fractional value makes it crawl through a block so a one-hour appointment
- * genuinely takes the full hour to be crossed.
+ * Minutes since midnight as a *fraction*, refreshed every 15 seconds, so the
+ * now-line crawls through a block instead of jumping a step at a time.
  */
 function useNowMins(active: boolean): number | null {
   const [mins, setMins] = useState<number | null>(null);
@@ -63,7 +76,6 @@ function useNowMins(active: boolean): number | null {
   return mins;
 }
 
-/** Red line + time bubble showing the current moment. */
 function NowIndicator({
   nowMins,
   dayStart,
@@ -82,7 +94,7 @@ function NowIndicator({
       style={{ top, willChange: "transform" }}
     >
       <div className="relative flex items-center">
-        <div className="absolute -left-[52px] min-w-[48px] h-[19px] px-1.5 rounded-full bg-danger flex items-center justify-center shadow-sm">
+        <div className="absolute -left-[54px] min-w-[50px] h-[19px] px-1.5 rounded-full bg-danger flex items-center justify-center shadow-sm">
           <span className="text-white text-[9px] font-black leading-none tnum">
             {fmtMins(nowMins)}
           </span>
@@ -104,33 +116,34 @@ function initials(name: string) {
     .toUpperCase();
 }
 
+/** Client photos keep their colour even inside a grey block. */
 function Avatar({
   name,
   avatarUrl,
-  color,
-  size = 22,
+  size = 38,
   onExpand,
 }: {
   name: string;
   avatarUrl?: string | null;
-  color: string;
   size?: number;
   onExpand?: () => void;
 }) {
   const inner = avatarUrl ? (
     <Image src={avatarUrl} alt={name} fill className="object-cover" sizes="48px" />
   ) : (
-    <span className="font-bold text-white" style={{ fontSize: size * 0.38 }}>
+    <span
+      className="w-full h-full flex items-center justify-center font-bold text-muted bg-border/60"
+      style={{ fontSize: size * 0.34 }}
+    >
       {initials(name)}
     </span>
   );
 
   const classes = cn(
-    "rounded-full overflow-hidden shrink-0 relative flex items-center justify-center",
+    "rounded-full overflow-hidden shrink-0 relative flex items-center justify-center bg-background",
     onExpand && "active:scale-95 transition-transform"
   );
 
-  // Tapping the photo opens it large without opening the appointment sheet
   if (onExpand) {
     return (
       <button
@@ -142,7 +155,7 @@ function Avatar({
         }}
         aria-label={`Ver foto de ${name}`}
         className={classes}
-        style={{ width: size, height: size, background: avatarUrl ? undefined : color }}
+        style={{ width: size, height: size }}
       >
         {inner}
       </button>
@@ -150,11 +163,7 @@ function Avatar({
   }
 
   return (
-    <div
-      className={classes}
-      style={{ width: size, height: size, background: avatarUrl ? undefined : color }}
-      title={name}
-    >
+    <div className={classes} style={{ width: size, height: size }} title={name}>
       {inner}
     </div>
   );
@@ -165,14 +174,24 @@ function DayTimelineBase({
   dayAvail,
   dateStr,
   blockedTimes = [],
+  closure = null,
+  shortestServiceMins,
   onSelect,
+  onSlotPick,
+  onSlotRejected,
 }: {
   appointments: AppointmentRow[];
   dayAvail: AvailabilityDay | null;
   dateStr: string;
   blockedTimes?: BlockedRange[];
+  closure?: ClosureRange | null;
+  shortestServiceMins: number;
   /** Opens the detail card instead of navigating away. */
   onSelect?: (a: AppointmentRow) => void;
+  /** A free slot the barber may book. */
+  onSlotPick?: (dateStr: string, hhmm: string) => void;
+  /** A slot that can't take an appointment, with the reason why. */
+  onSlotRejected?: (verdict: SlotVerdict) => void;
 }) {
   const [photo, setPhoto] = useState<{ src: string | null; name: string } | null>(null);
 
@@ -202,21 +221,66 @@ function DayTimelineBase({
   const dayEnd = toMins(dayAvail.end_time);
   const breakStart = dayAvail.break_start_time ? toMins(dayAvail.break_start_time) : null;
   const breakEnd = dayAvail.break_end_time ? toMins(dayAvail.break_end_time) : null;
+  const step = dayAvail.slot_minutes || 30;
   const totalH = ((dayEnd - dayStart) / 60) * HOUR_H;
 
-  // Hour lines only — half-hour ticks made the grid noisy on small screens
   const hours: number[] = [];
   for (let t = Math.ceil(dayStart / 60) * 60; t <= dayEnd; t += 60) hours.push(t);
+
+  // Shared shape for every availability question asked on this day
+  const busyApts = appointments.map((a) => ({
+    start: localMins(a.starts_at),
+    end: localMins(a.starts_at) + (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000,
+    label: a.guest_name ?? a.client.full_name,
+  }));
+  const busyBlocks = blocked.map((b) => ({
+    start: localMins(b.starts_at),
+    end: localMins(b.starts_at) + (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000,
+    label: b.reason ?? null,
+  }));
+
+  const ctxFor = (slotMins: number) => ({
+    dateStr,
+    slotMins,
+    hours: {
+      startMins: dayStart,
+      endMins: dayEnd,
+      breakStartMins: breakStart,
+      breakEndMins: breakEnd,
+    },
+    closure: closure ? { reason: closure.reason, description: closure.description } : null,
+    appointments: busyApts,
+    blocked: busyBlocks.map((b) => ({ ...b, label: b.label ?? undefined })),
+    shortestServiceMins,
+  });
+
+  // Every slot on the rail, so free time is tappable and busy time explains itself
+  const slots: number[] = [];
+  for (let t = dayStart; t + step <= dayEnd; t += step) slots.push(t);
+
+  function handleSlot(slotMins: number) {
+    const verdict = checkSlot(ctxFor(slotMins));
+    const hhmm = `${String(Math.floor(slotMins / 60)).padStart(2, "0")}:${String(slotMins % 60).padStart(2, "0")}`;
+    if (verdict.ok) onSlotPick?.(dateStr, hhmm);
+    else onSlotRejected?.(verdict);
+  }
+
+  // Ordered tops let a card shrink rather than cover the next one
+  const sorted = [...appointments].sort(
+    (a, b) => localMins(a.starts_at) - localMins(b.starts_at)
+  );
 
   return (
     <div>
       {appointments.length === 0 && blocked.length === 0 && (
-        <p className="text-xs text-muted text-center py-6">Sin citas — toca “Nueva cita” para crear una</p>
+        <p className="text-xs text-muted text-center py-4">
+          Sin citas — toca una hora libre para crear una
+        </p>
       )}
 
       <div className="relative flex">
-        {/* Hour rail */}
-        <div className="w-[52px] shrink-0 relative" style={{ height: totalH + 14 }}>
+        {/* Hour rail — the only thing that expresses real duration */}
+        <div className="w-[54px] shrink-0 relative" style={{ height: totalH + 16 }}>
           {hours.map((t) => (
             <div
               key={t}
@@ -228,9 +292,7 @@ function DayTimelineBase({
           ))}
         </div>
 
-        {/* Grid + blocks */}
-        <div className="flex-1 relative min-w-0" style={{ height: totalH + 14 }}>
-          {/* Hairline per hour, no vertical rule or outer frame */}
+        <div className="flex-1 relative min-w-0" style={{ height: totalH + 16 }}>
           {hours.map((t) => (
             <div
               key={t}
@@ -239,10 +301,35 @@ function DayTimelineBase({
             />
           ))}
 
+          {/* Tap targets underneath everything else */}
+          {slots.map((t) => {
+            const verdict = checkSlot(ctxFor(t));
+            return (
+              <button
+                key={t}
+                onClick={() => handleSlot(t)}
+                aria-label={`${fmtMins(t)} — ${verdict.ok ? "libre" : verdict.title}`}
+                className={cn(
+                  "absolute left-0 right-0 rounded-xl group",
+                  verdict.ok ? "active:bg-brand-light/60" : "active:bg-border/40"
+                )}
+                style={{ top: ((t - dayStart) / 60) * HOUR_H, height: (step / 60) * HOUR_H }}
+              >
+                {verdict.ok && (
+                  <span className="absolute inset-y-0 right-2 flex items-center opacity-0 group-active:opacity-100">
+                    <span className="w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center">
+                      <Plus size={13} strokeWidth={3} />
+                    </span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
           {/* Break shading */}
           {breakStart !== null && breakEnd !== null && (
             <div
-              className="absolute left-0 right-0 rounded-2xl flex items-center justify-center"
+              className="absolute left-0 right-0 rounded-2xl flex items-center justify-center pointer-events-none"
               style={{
                 top: ((breakStart - dayStart) / 60) * HOUR_H,
                 height: ((breakEnd - breakStart) / 60) * HOUR_H,
@@ -261,36 +348,44 @@ function DayTimelineBase({
             return (
               <div
                 key={b.id}
-                className="absolute left-0 right-0 rounded-2xl flex items-center justify-center gap-1.5"
+                className="absolute left-0 right-0 rounded-2xl flex items-center justify-center gap-1.5 pointer-events-none"
                 style={{
                   top: ((sMins - dayStart) / 60) * HOUR_H,
-                  height: Math.max((durMins / 60) * HOUR_H - 3, 22),
+                  height: Math.max((durMins / 60) * HOUR_H - BLOCK_GAP, 24),
                   background:
                     "repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 12px)",
                 }}
               >
                 <Lock size={11} className="text-muted" />
-                <span className="text-[10px] font-bold text-muted">Bloqueado</span>
+                <span className="text-[10px] font-bold text-muted">
+                  {b.reason || "Bloqueado"}
+                </span>
               </div>
             );
           })}
 
-          {/* Appointment blocks */}
-          {appointments.map((a) => {
+          {/* Appointment cards — same size for every appointment */}
+          {sorted.map((a, i) => {
             const sMins = localMins(a.starts_at);
             const durMins =
               (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000;
             const eMins = sMins + durMins;
             const top = ((sMins - dayStart) / 60) * HOUR_H;
-            // 4px gap keeps back-to-back appointments visually separate
-            const height = Math.max((durMins / 60) * HOUR_H - 4, 38);
-            const compact = height < 62;
 
-            // Purely time-based: nothing here changes the stored status.
+            // Never let a fixed-height card sit on top of the next one
+            const nextStart = sorted[i + 1] ? localMins(sorted[i + 1].starts_at) : null;
+            const roomPx =
+              nextStart === null
+                ? Number.POSITIVE_INFINITY
+                : ((nextStart - sMins) / 60) * HOUR_H - BLOCK_GAP;
+            const height = Math.max(Math.min(BLOCK_H, roomPx), 34);
+            const tight = height < BLOCK_H - 8;
+
             const running = nowMins !== null && nowMins >= sMins && nowMins < eMins;
             const finished = nowMins !== null ? nowMins >= eMins : false;
-            // 0 → 1 across the block, so the fill tracks the red line exactly
-            const progress = running ? (nowMins! - sMins) / durMins : 0;
+
+            // Grey by default, orange for confirmed and in-progress work
+            const warm = a.status === "confirmada" || running;
 
             const name = displayAppointmentName(
               a.client.full_name,
@@ -305,36 +400,19 @@ function DayTimelineBase({
                 className={cn(
                   "absolute left-0 right-0 rounded-2xl overflow-hidden text-left",
                   "active:scale-[0.985] transition-[opacity,transform] duration-150",
-                  // Only dims once the slot is fully in the past
+                  warm ? "bg-brand-light" : "bg-surface",
+                  running && "ring-[1.5px] ring-brand",
+                  // Dimmed purely because the slot is over — the stored status
+                  // is never changed automatically.
                   finished && "opacity-55"
                 )}
-                style={{
-                  top,
-                  height,
-                  background: `color-mix(in srgb, ${a.service.color} 14%, var(--surface))`,
-                  boxShadow: running
-                    ? `inset 0 0 0 1.5px ${a.service.color}`
-                    : `inset 0 0 0 1px color-mix(in srgb, ${a.service.color} 22%, transparent)`,
-                }}
+                style={{ top, height }}
               >
-                {/* Elapsed portion of an appointment happening right now */}
-                {running && (
-                  <span
-                    aria-hidden
-                    className="absolute inset-y-0 left-0 pointer-events-none"
-                    style={{
-                      width: `${Math.min(100, progress * 100)}%`,
-                      background: `color-mix(in srgb, ${a.service.color} 12%, transparent)`,
-                    }}
-                  />
-                )}
-
-                <div className="relative flex items-center gap-2.5 h-full px-2.5 py-1.5">
+                <div className="flex items-center gap-2.5 h-full px-2.5">
                   <Avatar
                     name={a.guest_name ?? a.client.full_name}
                     avatarUrl={a.guest_name ? null : a.client.avatar_url}
-                    color={a.service.color}
-                    size={compact ? 30 : 38}
+                    size={tight ? 28 : 36}
                     onExpand={() =>
                       setPhoto({
                         src: a.guest_name ? null : a.client.avatar_url,
@@ -345,65 +423,42 @@ function DayTimelineBase({
 
                   <div className="flex-1 min-w-0">
                     <p
-                      className="text-[11px] font-bold leading-tight tnum"
-                      style={{ color: a.service.color }}
+                      className={cn(
+                        "text-[11px] font-bold leading-tight tnum",
+                        running ? "text-brand" : "text-muted"
+                      )}
                     >
                       {fmtMins(sMins)}
                     </p>
-                    <p className="text-[15px] font-bold text-foreground truncate leading-tight">
+                    <p className="text-[14px] font-bold text-foreground truncate leading-tight">
                       {name}
                     </p>
-                    {!compact && (
-                      <p className="text-xs font-medium text-muted truncate leading-tight">
-                        {a.service.name}
+                    {!tight && (
+                      <p className="text-[11px] font-medium text-muted truncate leading-tight">
+                        {a.service.name} · {formatCurrency(a.price)}
                       </p>
                     )}
                   </div>
 
-                  {/* Guests riding along on this appointment */}
-                  {a.guests.slice(0, 3).map((g, i) => (
-                    <Avatar key={i} name={g} color={a.service.color} size={20} />
-                  ))}
-
-                  {/* Duration pill, mirroring the reference layout */}
-                  <span className="shrink-0 flex items-center gap-1 self-start mt-0.5">
-                    <span
-                      className="w-1.5 h-1.5 rounded-full"
-                      style={{ background: a.service.color }}
-                    />
-                    <span className="text-[11px] font-bold text-muted tnum">
-                      {Math.round(durMins)}m
+                  <div className="shrink-0 flex flex-col items-end gap-0.5">
+                    <span className="flex items-center gap-1">
+                      <span
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full",
+                          warm ? "bg-brand" : "bg-muted"
+                        )}
+                      />
+                      <span className="text-[11px] font-bold text-foreground tnum">
+                        {Math.round(durMins)}m
+                      </span>
                     </span>
-                  </span>
-                </div>
-
-                {/* Product thumbnails: know what to prepare at a glance */}
-                {a.products.length > 0 && height > 78 && (
-                  <div className="absolute bottom-1.5 left-[54px] flex items-center gap-1">
-                    {a.products.slice(0, 4).map((p, i) =>
-                      p.image_url ? (
-                        <span
-                          key={i}
-                          className="w-5 h-5 rounded-md overflow-hidden border border-border shrink-0 relative"
-                          title={`${p.quantity}× ${p.name}`}
-                        >
-                          <Image src={p.image_url} alt={p.name} fill className="object-cover" />
-                        </span>
-                      ) : (
-                        <span
-                          key={i}
-                          className="w-5 h-5 rounded-md bg-background border border-border flex items-center justify-center shrink-0"
-                          title={`${p.quantity}× ${p.name}`}
-                        >
-                          <ShoppingBag size={10} className="text-muted" />
-                        </span>
-                      )
+                    {!tight && (
+                      <span className="text-[9px] font-semibold text-muted leading-none">
+                        {STATUS_LABEL[a.status] ?? a.status}
+                      </span>
                     )}
-                    <span className="text-[9px] font-bold text-muted tnum">
-                      {a.products.reduce((acc, p) => acc + p.quantity, 0)} prod.
-                    </span>
                   </div>
-                )}
+                </div>
               </button>
             );
           })}
@@ -423,5 +478,5 @@ function DayTimelineBase({
   );
 }
 
-// Re-renders only when the day, its data or the selection handler change
+// Re-renders only when the day, its data or the handlers change
 export const DayTimeline = memo(DayTimelineBase);

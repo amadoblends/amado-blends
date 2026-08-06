@@ -52,33 +52,38 @@ export function BlockHourQuick({
   const [reason, setReason] = useState("descanso");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [saving, setSaving] = useState(false);
+  const [, startTransition] = useTransition();
 
   const endTime = addMinutesTo(startTime, duration);
 
-  function save() {
+  async function save() {
     setError(null);
-    startTransition(async () => {
-      const supabase = createClient();
-      const [y, mo, d] = dateStr.split("-").map(Number);
-      const [sh, sm] = startTime.split(":").map(Number);
-      const starts = new Date(y, mo - 1, d, sh, sm, 0);
-      const ends = new Date(starts.getTime() + duration * 60000);
+    setSaving(true);
 
-      const label = REASONS.find((r) => r.value === reason)?.label ?? "Bloqueado";
-      const { error: insertError } = await supabase.from("blocked_times").insert({
-        starts_at: starts.toISOString(),
-        ends_at: ends.toISOString(),
-        reason: note.trim() ? `${label} — ${note.trim()}` : label,
-      });
+    const supabase = createClient();
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    const [sh, sm] = startTime.split(":").map(Number);
+    const starts = new Date(y, mo - 1, d, sh, sm, 0);
+    const ends = new Date(starts.getTime() + duration * 60000);
 
-      if (insertError) {
-        setError("No se pudo bloquear esa hora. ¿Ya hay una cita ahí?");
-        return;
-      }
-      router.refresh();
-      onClose();
+    const label = REASONS.find((r) => r.value === reason)?.label ?? "Bloqueado";
+    const { error: insertError } = await supabase.from("blocked_times").insert({
+      starts_at: starts.toISOString(),
+      ends_at: ends.toISOString(),
+      reason: note.trim() ? `${label} — ${note.trim()}` : label,
     });
+
+    setSaving(false);
+    if (insertError) {
+      setError("No se pudo bloquear esa hora. ¿Ya hay una cita ahí?");
+      return;
+    }
+
+    // Close on success and let the calendar catch up behind the modal, so the
+    // barber never waits on a re-render they aren't looking at.
+    onClose();
+    startTransition(() => router.refresh());
   }
 
   return (
@@ -163,10 +168,10 @@ export function BlockHourQuick({
           </button>
           <button
             onClick={save}
-            disabled={isPending}
+            disabled={saving}
             className="flex-[2] h-12 rounded-xl bg-brand text-white text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2"
           >
-            {isPending ? <Loader2 size={16} className="animate-spin" /> : <Lock size={15} />}
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Lock size={15} />}
             Bloquear
           </button>
         </div>

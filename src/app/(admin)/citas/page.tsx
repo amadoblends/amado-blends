@@ -5,9 +5,12 @@ import {
 import {
   getAppointmentsForDay,
   getAppointmentsInRange,
+  getAppointmentsLite,
   getAppointmentStarts,
-  getBlockedTimesForDay,
+  getBlockedTimesInRange,
   getClosures,
+  type AppointmentRow,
+  type LiteAppointment,
 } from "@/lib/data/appointments";
 import { getAvailability } from "@/lib/data/availability";
 import { createClient } from "@/lib/supabase/server";
@@ -49,21 +52,42 @@ export default async function CitasPage({
   const stripStart = addDays(date, -60);
   const stripEnd = addDays(date, 60);
 
+  /*
+   * Each view asks for exactly what it draws:
+   *   day  — the full row (photos, products, guests) for one day
+   *   week — the full row across seven days
+   *   month/year — name, colour and status only
+   * Pulling the full joins for a whole year was the reason those two views
+   * took so long to appear.
+   */
+  const heavy = view === "day" || view === "week";
+
   const [
     appointments,
+    liteAppointments,
     appointmentStarts,
     availability,
     blockedTimes,
     closures,
     { data: servicesData },
   ] = await Promise.all([
-    // The day view has its own richer query; other views use the range one
-    view === "day" ? getAppointmentsForDay(date) : getAppointmentsInRange(rangeStart, rangeEnd),
+    view === "day"
+      ? getAppointmentsForDay(date)
+      : view === "week"
+        ? getAppointmentsInRange(rangeStart, rangeEnd)
+        : Promise.resolve([] as AppointmentRow[]),
+    heavy
+      ? Promise.resolve([] as LiteAppointment[])
+      : getAppointmentsLite(rangeStart, rangeEnd),
     view === "day" ? getAppointmentStarts(stripStart, stripEnd) : Promise.resolve([]),
     getAvailability(),
-    getBlockedTimesForDay(date),
+    // The week grid needs every day's blocks, not just the selected one
+    heavy ? getBlockedTimesInRange(rangeStart, rangeEnd) : Promise.resolve([]),
     getClosures(),
-    supabase.from("services").select("id, name, duration_minutes, price, color").order("name"),
+    supabase
+      .from("services")
+      .select("id, name, duration_minutes, price, color")
+      .order("name"),
   ]);
 
   // Grouped in the barber's timezone, not the server's
@@ -84,6 +108,7 @@ export default async function CitasPage({
         date={date}
         dateStr={dateStr}
         appointments={appointments}
+        liteAppointments={liteAppointments}
         dayAvail={dayAvail}
         availability={availability}
         services={servicesData ?? []}

@@ -13,7 +13,10 @@ import { Lock, CalendarOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { displayAppointmentName } from "@/lib/guests";
 import { reasonLabel } from "@/lib/closures";
-import type { AppointmentRow, BlockedRange, ClosureRange } from "@/lib/data/appointments";
+import { checkSlot, type SlotVerdict } from "@/lib/slot-availability";
+import type {
+  AppointmentRow, BlockedRange, ClosureRange, LiteAppointment,
+} from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 
 const HOUR_H = 56; // week view is denser than the single-day timeline
@@ -95,14 +98,18 @@ export function WeekView({
   blockedTimes,
   closures,
   availability,
+  shortestServiceMins,
   onSlotClick,
+  onSlotRejected,
 }: {
   date: Date;
   appointments: AppointmentRow[];
   blockedTimes: BlockedRange[];
   closures: ClosureRange[];
   availability: AvailabilityDay[];
+  shortestServiceMins: number;
   onSlotClick: (dateStr: string, hhmm: string) => void;
+  onSlotRejected: (verdict: SlotVerdict) => void;
 }) {
   const days = eachDayOfInterval({
     start: startOfWeek(date, { weekStartsOn: 1 }),
@@ -206,25 +213,70 @@ export function WeekView({
                   />
                 )}
 
-                {/* Clickable empty slots, every 30 min */}
-                {dayAvail && !closed &&
-                  Array.from(
-                    { length: Math.floor((dayEnd - dayStart) / 30) },
-                    (_, i) => dayStart + i * 30
-                  ).map((t) => (
+                {/*
+                  * Every half hour is tappable, but the same rules the day
+                  * view uses decide whether it opens the wizard or explains
+                  * why that hour can't take an appointment.
+                  */}
+                {Array.from(
+                  { length: Math.floor((dayEnd - dayStart) / 30) },
+                  (_, i) => dayStart + i * 30
+                ).map((t) => {
+                  const verdict = checkSlot({
+                    dateStr: key,
+                    slotMins: t,
+                    hours: dayAvail
+                      ? {
+                          startMins: toMins(dayAvail.start_time),
+                          endMins: toMins(dayAvail.end_time),
+                          breakStartMins: dayAvail.break_start_time
+                            ? toMins(dayAvail.break_start_time)
+                            : null,
+                          breakEndMins: dayAvail.break_end_time
+                            ? toMins(dayAvail.break_end_time)
+                            : null,
+                        }
+                      : null,
+                    closure: closed
+                      ? { reason: closed.reason, description: closed.description }
+                      : null,
+                    appointments: dayApts.map((a) => ({
+                      start: localMins(a.starts_at),
+                      end:
+                        localMins(a.starts_at) +
+                        (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000,
+                      label: a.guest_name ?? a.client.full_name,
+                    })),
+                    blocked: dayBlocks.map((b) => ({
+                      start: localMins(b.starts_at),
+                      end:
+                        localMins(b.starts_at) +
+                        (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000,
+                      label: b.reason ?? undefined,
+                    })),
+                    shortestServiceMins,
+                  });
+
+                  return (
                     <button
                       key={t}
                       onClick={() =>
-                        onSlotClick(
-                          key,
-                          `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`
-                        )
+                        verdict.ok
+                          ? onSlotClick(
+                              key,
+                              `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`
+                            )
+                          : onSlotRejected(verdict)
                       }
-                      className="absolute left-0 right-0 hover:bg-brand-light/60 transition-colors"
+                      className={cn(
+                        "absolute left-0 right-0 transition-colors",
+                        verdict.ok ? "hover:bg-brand-light/60" : "hover:bg-border/30"
+                      )}
                       style={{ top: ((t - dayStart) / 60) * HOUR_H, height: HOUR_H / 2 }}
-                      aria-label={`Crear cita ${fmtTime(t)}`}
+                      aria-label={`${fmtTime(t)} — ${verdict.ok ? "libre" : verdict.title}`}
                     />
-                  ))}
+                  );
+                })}
 
                 {/* Blocked hours */}
                 {dayBlocks.map((b) => {
@@ -367,7 +419,7 @@ export function MonthView({
   availability,
 }: {
   date: Date;
-  appointments: AppointmentRow[];
+  appointments: LiteAppointment[];
   closures: ClosureRange[];
   availability: AvailabilityDay[];
 }) {
@@ -377,7 +429,7 @@ export function MonthView({
   });
 
   const byDay = useMemo(() => {
-    const map = new Map<string, AppointmentRow[]>();
+    const map = new Map<string, LiteAppointment[]>();
     for (const a of appointments) {
       const key = localKey(a.starts_at);
       const list = map.get(key) ?? [];
@@ -444,12 +496,11 @@ export function MonthView({
                       key={a.id}
                       className="text-[9px] font-medium truncate rounded px-1 py-px leading-tight"
                       style={{
-                        background: `color-mix(in srgb, ${a.service.color} 18%, var(--surface))`,
-                        color: a.service.color,
+                        background: `color-mix(in srgb, ${a.color} 18%, var(--surface))`,
+                        color: a.color,
                       }}
                     >
-                      {fmtTime(localMins(a.starts_at))}{" "}
-                      {a.guest_name ?? a.client.full_name.split(" ")[0]}
+                      {fmtTime(localMins(a.starts_at))} {a.name.split(" ")[0]}
                     </span>
                   ))}
                   {apts.length > 3 && (
@@ -473,7 +524,7 @@ export function YearView({
   closures,
 }: {
   date: Date;
-  appointments: AppointmentRow[];
+  appointments: LiteAppointment[];
   closures: ClosureRange[];
 }) {
   const router = useRouter();

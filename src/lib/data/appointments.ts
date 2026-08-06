@@ -113,6 +113,7 @@ export interface BlockedRange {
   id: string;
   starts_at: string;
   ends_at: string;
+  reason?: string | null;
 }
 
 export interface ClosureRange {
@@ -184,17 +185,72 @@ export async function getAppointmentsInRange(
   }));
 }
 
-export async function getBlockedTimesForDay(date: Date): Promise<BlockedRange[]> {
+/**
+ * Just enough to paint a month or year grid: a dot, a colour and a name.
+ *
+ * The full query joins clients, services, products and guests — pulling that
+ * for a whole year was the reason those two views felt heavy.
+ */
+export interface LiteAppointment {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  status: AppointmentStatus;
+  name: string;
+  color: string;
+}
+
+export async function getAppointmentsLite(
+  start: Date,
+  end: Date
+): Promise<LiteAppointment[]> {
   const supabase = await createClient();
-  const from = new Date(startOfDay(date).getTime() - 14 * 3600_000);
-  const to = new Date(endOfDay(date).getTime() + 14 * 3600_000);
+  const from = new Date(startOfDay(start).getTime() - 14 * 3600_000);
+  const to = new Date(endOfDay(end).getTime() + 14 * 3600_000);
+
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("id, starts_at, ends_at, status, guest_name, clients(full_name), services(color)")
+    .gte("starts_at", from.toISOString())
+    .lte("starts_at", to.toISOString())
+    .neq("status", "cancelada")
+    .order("starts_at", { ascending: true })
+    .limit(3000);
+
+  if (error || !data) return [];
+
+  return data.map((a) => ({
+    id: a.id,
+    starts_at: a.starts_at,
+    ends_at: a.ends_at,
+    status: a.status,
+    name:
+      a.guest_name ??
+      (a.clients as unknown as { full_name: string } | null)?.full_name ??
+      "Cliente",
+    color: (a.services as unknown as { color: string } | null)?.color ?? "#8b8b93",
+  }));
+}
+
+export async function getBlockedTimesInRange(
+  start: Date,
+  end: Date
+): Promise<BlockedRange[]> {
+  const supabase = await createClient();
+  const from = new Date(startOfDay(start).getTime() - 14 * 3600_000);
+  const to = new Date(endOfDay(end).getTime() + 14 * 3600_000);
   const { data, error } = await supabase
     .from("blocked_times")
-    .select("id, starts_at, ends_at")
+    .select("id, starts_at, ends_at, reason")
     .lt("starts_at", to.toISOString())
-    .gt("ends_at", from.toISOString());
+    .gt("ends_at", from.toISOString())
+    .order("starts_at");
   if (error || !data) return [];
   return data;
+}
+
+export async function getBlockedTimesForDay(date: Date): Promise<BlockedRange[]> {
+  return getBlockedTimesInRange(date, date);
 }
 
 // Returns raw ISO timestamps; the client component groups them by LOCAL date
