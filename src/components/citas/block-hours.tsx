@@ -8,28 +8,12 @@ import { Lock, Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import {
+  toMins, localMins, localDateStr, todayStr, durationMins, dateAt,
+  fmtMins as fmtSlot,
+} from "@/lib/time";
 import type { AvailabilityDay } from "@/lib/data/availability";
 import type { AppointmentRow, BlockedRange } from "@/lib/data/appointments";
-
-function toMins(t: string) {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-function localMins(iso: string) {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes();
-}
-function localDateStr(iso: string) {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function fmtSlot(mins: number) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const p = h >= 12 ? "PM" : "AM";
-  const dh = h % 12 === 0 ? 12 : h % 12;
-  return `${dh}:${String(m).padStart(2, "0")} ${p}`;
-}
 
 type SlotState = "free" | "blocked" | "busy" | "past";
 
@@ -109,31 +93,26 @@ export function BlockHoursModal({
   }
 
   const nowRef = new Date();
-  const todayStr = localDateStr(nowRef.toISOString());
+  const today = todayStr();
   const nowMins = nowRef.getHours() * 60 + nowRef.getMinutes();
 
-  function slotDate(mins: number) {
-    const [y, mo, d] = dateStr.split("-").map(Number);
-    return new Date(y, mo - 1, d, Math.floor(mins / 60), mins % 60, 0);
-  }
+  const slotDate = (mins: number) => dateAt(dateStr, mins);
 
   function blockFor(mins: number): BlockedRange | undefined {
     return dayBlocks.find((b) => {
       const s = localMins(b.starts_at);
-      const e = s + (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000;
-      return s < mins + step && e > mins;
+      return s < mins + step && s + durationMins(b.starts_at, b.ends_at) > mins;
     });
   }
 
   function stateOf(mins: number): SlotState {
     const busy = dayApts.some((a) => {
       const s = localMins(a.starts_at);
-      const e = s + (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000;
-      return s < mins + step && e > mins;
+      return s < mins + step && s + durationMins(a.starts_at, a.ends_at) > mins;
     });
     if (busy) return "busy";
     if (blockFor(mins)) return "blocked";
-    if (dateStr < todayStr || (dateStr === todayStr && mins < nowMins)) return "past";
+    if (dateStr < today || (dateStr === today && mins < nowMins)) return "past";
     return "free";
   }
 

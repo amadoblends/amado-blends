@@ -4,25 +4,20 @@ import { useState, useCallback, useEffect, useRef, useTransition, useMemo } from
 import { useRouter } from "next/navigation";
 import { format, addDays, subDays } from "date-fns";
 import { es } from "date-fns/locale";
-import {
-  CalendarPlus, UserPlus, Users, Lock, X, Plus, Clock, CalendarOff, Info,
-} from "lucide-react";
+import { Info } from "lucide-react";
 import { DayTimeline } from "./timeline";
 import { AppointmentWizard, type ServiceOption } from "./wizard";
-import { BlockHoursModal } from "./block-hours";
 import { BlockHourQuick } from "./block-hour-quick";
-import { ClosureModal } from "./closure-modal";
-import { CalendarToolbar, type CalendarView } from "./calendar-toolbar";
+import { CalendarToolbar, ViewSwitcher, type CalendarView } from "./calendar-toolbar";
 import { WeekView, MonthView, YearView, closureFor } from "./calendar-views";
 import { DayStripScroller } from "./day-strip-scroller";
 import { AppointmentSheet } from "./appointment-sheet";
 import { RescheduleModal } from "./reschedule-modal";
 import { FullCalendarSheet } from "./full-calendar-sheet";
+import { SlotActionsCard, type SlotAction } from "./slot-actions-card";
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
-import { SearchModal } from "@/components/search-modal";
 import { Modal } from "@/components/ui/modal";
 import { reasonLabel } from "@/lib/closures";
-import { cn } from "@/lib/utils";
 import type { SlotVerdict } from "@/lib/slot-availability";
 import type {
   AppointmentRow,
@@ -30,7 +25,7 @@ import type {
   ClosureRange,
   LiteAppointment,
 } from "@/lib/data/appointments";
-import type { AvailabilityDay } from "@/lib/data/availability";
+import type { AvailabilityDay, BookingSettings } from "@/lib/data/availability";
 
 /** Horizontal travel needed before a drag counts as a day swipe. */
 const SWIPE_PX = 55;
@@ -44,6 +39,7 @@ export function CalendarShell({
   dayAvail,
   availability,
   services,
+  bookingSettings,
   blockedTimes = [],
   closures = [],
   dayCounts = {},
@@ -57,6 +53,7 @@ export function CalendarShell({
   dayAvail: AvailabilityDay | null;
   availability: AvailabilityDay[];
   services: ServiceOption[];
+  bookingSettings: BookingSettings;
   blockedTimes?: BlockedRange[];
   closures?: ClosureRange[];
   dayCounts?: Record<string, number>;
@@ -65,26 +62,26 @@ export function CalendarShell({
   const [, startTransition] = useTransition();
 
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [blockOpen, setBlockOpen] = useState(false);
-  const [closureOpen, setClosureOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [fullCalendarOpen, setFullCalendarOpen] = useState(false);
-  // Why a tapped hour can't take an appointment
-  const [rejected, setRejected] = useState<SlotVerdict | null>(null);
-
-  // Tapping an empty slot opens a small menu with the seed date/time
-  const [slot, setSlot] = useState<{ date: string; time: string } | null>(null);
-  const [wizardSeed, setWizardSeed] = useState<{ date: string; time: string } | null>(null);
-  // Blocking a slot picked on the calendar keeps its date and start time
-  const [quickBlock, setQuickBlock] = useState<{ date: string; time: string } | null>(null);
-  // Tapping a block opens the card; the profile stays a further tap away
-  const [selected, setSelected] = useState<AppointmentRow | null>(null);
-  const [rescheduling, setRescheduling] = useState<AppointmentRow | null>(null);
-  // Title follows the day strip while it's being swiped
-  const [visibleMonth, setVisibleMonth] = useState<Date | undefined>(undefined);
+  const [wizardEntry, setWizardEntry] = useState<"type" | "walkin" | "search">("type");
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   /*
-   * The selected day and view are mirrored locally so a tap or a swipe paints
+   * Booking from the calendar is two deliberate taps: the first pencils a
+   * placeholder into the slot, the second opens the action card. That way a
+   * stray tap while scrolling never launches a form.
+   */
+  const [draft, setDraft] = useState<{ date: string; time: string } | null>(null);
+  const [actionsFor, setActionsFor] = useState<{ date: string; time: string } | null>(null);
+
+  const [wizardSeed, setWizardSeed] = useState<{ date: string; time: string } | null>(null);
+  const [quickBlock, setQuickBlock] = useState<{ date: string; time: string } | null>(null);
+  const [selected, setSelected] = useState<AppointmentRow | null>(null);
+  const [rescheduling, setRescheduling] = useState<AppointmentRow | null>(null);
+  const [visibleMonth, setVisibleMonth] = useState<Date | undefined>(undefined);
+  const [rejected, setRejected] = useState<SlotVerdict | null>(null);
+
+  /*
+   * The selected day and view are mirrored locally so a tap paints
    * immediately instead of waiting for the server round trip. Both re-sync
    * whenever the server sends new props.
    */
@@ -101,7 +98,7 @@ export function CalendarShell({
       setSlideDir(dir);
       setPendingDate(nextDate);
       setPendingView(nextView);
-      // Leaving the day view drops the scroll-driven title override
+      setDraft(null);
       if (nextView !== "day") setVisibleMonth(undefined);
       startTransition(() => {
         router.push(`/citas?view=${nextView}&date=${nextDate}`, { scroll: false });
@@ -110,9 +107,34 @@ export function CalendarShell({
     [router, pendingDate, pendingView]
   );
 
+  /*
+   * Warm the other three views for the current day the moment the page is
+   * idle. Switching then costs a cached RSC payload instead of a cold fetch,
+   * which is what the delay between Día / Semana / Mes / Año really was.
+   */
+  useEffect(() => {
+    const warm = () => {
+      for (const v of ["day", "week", "month", "year"] as CalendarView[]) {
+        if (v !== view) router.prefetch(`/citas?view=${v}&date=${dateStr}`);
+      }
+    };
+    const idle = window.requestIdleCallback;
+    if (typeof idle === "function") {
+      const id = idle(warm, { timeout: 2000 });
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const id = setTimeout(warm, 500);
+    return () => clearTimeout(id);
+  }, [router, view, dateStr]);
+
   const handleNavigate = useCallback(
     (d: Date, v: CalendarView) => navigate(format(d, "yyyy-MM-dd"), v),
     [navigate]
+  );
+
+  const handleSetView = useCallback(
+    (v: CalendarView) => navigate(pendingDate, v),
+    [navigate, pendingDate]
   );
 
   const handlePickDay = useCallback(
@@ -123,15 +145,12 @@ export function CalendarShell({
     [navigate, pendingDate]
   );
 
-  // The header's calendar button opens the whole calendar, not just "today"
-  const handleOpenFullCalendar = useCallback(() => setFullCalendarOpen(true), []);
-
-  const handleFullCalendarPick = useCallback(
-    (nextDate: string, nextView: CalendarView) => {
+  const handlePickFromCalendar = useCallback(
+    (dateKey: string) => {
       setVisibleMonth(undefined);
-      navigate(nextDate, nextView);
+      navigate(dateKey, pendingView);
     },
-    [navigate]
+    [navigate, pendingView]
   );
 
   // ── Swipe left / right on the day view ───────────────────────────────────
@@ -163,28 +182,46 @@ export function CalendarShell({
       if (Math.abs(dx) < SWIPE_PX) return;
 
       const base = new Date(pendingDate + "T00:00:00");
-      // Drag left → next day, drag right → previous day
       const next = dx < 0 ? addDays(base, 1) : subDays(base, 1);
       navigate(format(next, "yyyy-MM-dd"), "day", dx < 0 ? "left" : "right");
     },
     [navigate, pendingDate]
   );
 
-  // ── Everything else ──────────────────────────────────────────────────────
-  const openWizardAt = useCallback((seed: { date: string; time: string } | null) => {
-    setWizardSeed(seed);
-    setSlot(null);
+  // ── Slot flow ────────────────────────────────────────────────────────────
+  const handleSlotTap = useCallback((d: string, t: string) => {
+    // Tapping a different slot just moves the placeholder
+    setDraft({ date: d, time: t });
+  }, []);
+
+  const handleDraftTap = useCallback(() => setActionsFor(draft), [draft]);
+
+  const handleSlotAction = useCallback(
+    (action: SlotAction) => {
+      const slot = actionsFor;
+      setActionsFor(null);
+      if (!slot) return;
+
+      if (action === "block") {
+        setQuickBlock(slot);
+        setDraft(null);
+        return;
+      }
+      setWizardSeed(slot);
+      setWizardEntry(action === "walkin" ? "walkin" : "search");
+      setWizardOpen(true);
+    },
+    [actionsFor]
+  );
+
+  // The toolbar's own button starts from scratch, so it asks the type question
+  const handleNewAppointment = useCallback(() => {
+    setWizardSeed(null);
+    setWizardEntry("type");
     setWizardOpen(true);
   }, []);
 
-  const handleNewAppointment = useCallback(() => openWizardAt(null), [openWizardAt]);
-  const handleBlockHours = useCallback(() => setBlockOpen(true), []);
-  const handleCloseDays = useCallback(() => setClosureOpen(true), []);
-  const handleSearch = useCallback(() => setSearchOpen(true), []);
-  const handleSlotClick = useCallback(
-    (d: string, t: string) => setSlot({ date: d, time: t }),
-    []
-  );
+  const handleOpenPicker = useCallback(() => setPickerOpen(true), []);
   const handleSlotRejected = useCallback((v: SlotVerdict) => setRejected(v), []);
   const handleSelect = useCallback((a: AppointmentRow) => setSelected(a), []);
 
@@ -198,11 +235,7 @@ export function CalendarShell({
     return durations.length ? Math.min(...durations) : 15;
   }, [services]);
 
-  // The server is still catching up, so drive the header off the local value
-  const headerDate = useMemo(
-    () => new Date(pendingDate + "T00:00:00"),
-    [pendingDate]
-  );
+  const headerDate = useMemo(() => new Date(pendingDate + "T00:00:00"), [pendingDate]);
 
   // Only animate once the props for the new day have actually arrived
   const settled = pendingDate === dateStr && pendingView === view;
@@ -222,11 +255,11 @@ export function CalendarShell({
         date={headerDate}
         displayDate={pendingView === "day" ? visibleMonth : undefined}
         onNavigate={handleNavigate}
-        onSearch={handleSearch}
-        onToday={handleOpenFullCalendar}
+        onSetView={handleSetView}
+        onOpenPicker={handleOpenPicker}
+        onNewAppointment={handleNewAppointment}
       />
 
-      {/* Day strip sits between the header and the actions */}
       {pendingView === "day" && (
         <DayStripScroller
           selected={pendingDate}
@@ -236,20 +269,9 @@ export function CalendarShell({
         />
       )}
 
-      {/* Primary actions, as pills */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
-        <ActionPill onClick={handleNewAppointment} primary icon={<Plus size={15} strokeWidth={3} />}>
-          Nueva cita
-        </ActionPill>
-        <ActionPill onClick={handleBlockHours} icon={<Clock size={14} strokeWidth={2.4} />}>
-          Bloquear hora
-        </ActionPill>
-        <ActionPill onClick={handleCloseDays} icon={<CalendarOff size={14} strokeWidth={2.4} />}>
-          Bloquear días
-        </ActionPill>
-      </div>
+      {/* Always visible, never inside a menu */}
+      <ViewSwitcher view={pendingView} onSetView={handleSetView} />
 
-      {/* Closure banner on the day being viewed */}
       {todaysClosure && view === "day" && (
         <div className="bg-danger-light rounded-2xl border border-danger/20 px-4 py-3">
           <p className="text-sm font-bold text-danger">
@@ -263,9 +285,8 @@ export function CalendarShell({
       )}
 
       {/*
-       * One container for every view with a floor on its height: switching
-       * between day / week / month / year no longer collapses the page and
-       * bounces the scroll position.
+       * One container for every view with a floor on its height, so switching
+       * never collapses the page or bounces the scroll position.
        */}
       <div
         className="min-h-[62vh]"
@@ -282,8 +303,10 @@ export function CalendarShell({
               blockedTimes={blockedTimes}
               closure={todaysClosure}
               shortestServiceMins={shortestServiceMins}
+              draft={draft}
               onSelect={handleSelect}
-              onSlotPick={handleSlotClick}
+              onSlotTap={handleSlotTap}
+              onDraftTap={handleDraftTap}
               onSlotRejected={handleSlotRejected}
             />
           )}
@@ -296,7 +319,9 @@ export function CalendarShell({
               closures={closures}
               availability={availability}
               shortestServiceMins={shortestServiceMins}
-              onSlotClick={handleSlotClick}
+              draft={draft}
+              onSlotTap={handleSlotTap}
+              onDraftTap={handleDraftTap}
               onSlotRejected={handleSlotRejected}
             />
           )}
@@ -316,81 +341,30 @@ export function CalendarShell({
         </div>
       </div>
 
-      {/* Slot menu */}
-      <Modal
-        open={slot !== null}
-        onClose={() => setSlot(null)}
-        title={
-          slot
-            ? `${format(new Date(slot.date + "T00:00:00"), "EEEE d MMM", { locale: es })} · ${slot.time}`
-            : ""
-        }
-      >
-        <div className="space-y-2">
-          <SlotAction
-            icon={<CalendarPlus size={19} className="text-brand" />}
-            title="Crear cita"
-            hint="Cliente existente o nuevo"
-            onClick={() => openWizardAt(slot)}
-          />
-          <SlotAction
-            icon={<UserPlus size={19} className="text-brand" />}
-            title="Agregar walk-in"
-            hint="Cliente sin cuenta previa"
-            onClick={() => openWizardAt(slot)}
-          />
-          <SlotAction
-            icon={<Users size={19} className="text-brand" />}
-            title="Buscar cliente existente"
-            hint="Por nombre, teléfono o correo"
-            onClick={() => openWizardAt(slot)}
-          />
-          <SlotAction
-            icon={<Lock size={19} className="text-foreground" />}
-            title="Bloquear esta hora"
-            hint={slot ? `Desde las ${slot.time}` : "Nadie podrá reservarla"}
-            onClick={() => {
-              // Carry the tapped slot straight through — no re-picking
-              setQuickBlock(slot);
-              setSlot(null);
-            }}
-          />
-          <button
-            onClick={() => setSlot(null)}
-            className="w-full flex items-center justify-center gap-2 h-11 rounded-xl border border-border text-sm font-semibold text-muted"
-          >
-            <X size={15} /> Cancelar
-          </button>
-        </div>
-      </Modal>
+      {/* Second tap on the placeholder */}
+      <SlotActionsCard
+        slot={actionsFor}
+        onClose={() => setActionsFor(null)}
+        onPick={handleSlotAction}
+      />
 
       <AppointmentWizard
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onSuccess={() => {
           setWizardOpen(false);
+          setDraft(null);
           router.refresh();
         }}
         services={services}
         availability={availability}
+        bookingSettings={bookingSettings}
         defaultDate={wizardSeed?.date ?? dateStr}
         defaultTime={wizardSeed?.time}
+        entry={wizardEntry}
       />
 
-      {/*
-       * Toolbar version: pick any hours of the day. It reuses the data the
-       * calendar already has, so it opens with the grid drawn.
-       */}
-      <BlockHoursModal
-        open={blockOpen}
-        onClose={() => setBlockOpen(false)}
-        dateStr={dateStr}
-        dayAvail={dayAvail}
-        appointments={appointments}
-        blockedTimes={blockedTimes}
-      />
-
-      {/* Slot version: date and start time already known */}
+      {/* Blocking a slot picked on the calendar: date and time already known */}
       {quickBlock && (
         <BlockHourQuick
           open
@@ -400,62 +374,14 @@ export function CalendarShell({
         />
       )}
 
-      <ClosureModal
-        open={closureOpen}
-        onClose={() => setClosureOpen(false)}
-        defaultDate={dateStr}
-      />
-
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
-
-      {/* Full calendar: any date, and which view to land in */}
       <FullCalendarSheet
-        open={fullCalendarOpen}
-        onClose={() => setFullCalendarOpen(false)}
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
         selected={pendingDate}
-        view={pendingView}
         dayCounts={dayCounts}
         closures={closures}
-        onPick={handleFullCalendarPick}
+        onPick={handlePickFromCalendar}
       />
-
-      {/* Why that hour can't take an appointment */}
-      <Modal
-        open={rejected !== null}
-        onClose={() => setRejected(null)}
-        title={rejected?.title ?? ""}
-      >
-        <div className="space-y-4">
-          <div className="flex gap-3">
-            <span className="w-9 h-9 rounded-full bg-warning-light flex items-center justify-center shrink-0">
-              <Info size={17} className="text-warning" />
-            </span>
-            <p className="text-sm text-foreground leading-relaxed pt-1.5">
-              {rejected?.detail}
-            </p>
-          </div>
-
-          {/* A blocked hour is the one case the barber can undo right here */}
-          {rejected?.reason === "blocked" && (
-            <button
-              onClick={() => {
-                setRejected(null);
-                setBlockOpen(true);
-              }}
-              className="w-full h-11 rounded-xl border border-border text-sm font-semibold text-foreground active:bg-background"
-            >
-              Administrar horas bloqueadas
-            </button>
-          )}
-
-          <button
-            onClick={() => setRejected(null)}
-            className="w-full h-11 rounded-xl bg-foreground text-background text-sm font-bold"
-          >
-            Entendido
-          </button>
-        </div>
-      </Modal>
 
       <AppointmentSheet
         appointment={selected}
@@ -475,61 +401,28 @@ export function CalendarShell({
           availability={availability}
         />
       )}
+
+      {/* Why that hour can't take an appointment */}
+      <Modal
+        open={rejected !== null}
+        onClose={() => setRejected(null)}
+        title={rejected?.title ?? ""}
+      >
+        <div className="space-y-4">
+          <div className="flex gap-3">
+            <span className="w-9 h-9 rounded-full bg-warning-light flex items-center justify-center shrink-0">
+              <Info size={17} className="text-warning" />
+            </span>
+            <p className="text-sm text-foreground leading-relaxed pt-1.5">{rejected?.detail}</p>
+          </div>
+          <button
+            onClick={() => setRejected(null)}
+            className="w-full h-11 rounded-xl bg-foreground text-background text-sm font-bold"
+          >
+            Entendido
+          </button>
+        </div>
+      </Modal>
     </div>
-  );
-}
-
-function ActionPill({
-  onClick,
-  icon,
-  primary,
-  children,
-}: {
-  onClick: () => void;
-  icon: React.ReactNode;
-  primary?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "h-10 px-3.5 rounded-full text-xs font-bold flex items-center gap-1.5 shrink-0 whitespace-nowrap",
-        "active:scale-95 transition-transform",
-        primary
-          ? "bg-foreground text-background"
-          : "bg-surface border border-border text-foreground"
-      )}
-    >
-      {icon}
-      {children}
-    </button>
-  );
-}
-
-function SlotAction({
-  icon,
-  title,
-  hint,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl border border-border bg-background active:bg-surface text-left"
-    >
-      <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center shrink-0">
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="font-semibold text-sm text-foreground">{title}</p>
-        <p className="text-xs text-muted">{hint}</p>
-      </div>
-    </button>
   );
 }

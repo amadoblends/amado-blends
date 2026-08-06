@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { displayAppointmentName } from "@/lib/guests";
 import { reasonLabel } from "@/lib/closures";
 import { checkSlot, type SlotVerdict } from "@/lib/slot-availability";
+import { toMins, localMins, localDateStr, fmtMins, durationMins } from "@/lib/time";
 import type {
   AppointmentRow, BlockedRange, ClosureRange, LiteAppointment,
 } from "@/lib/data/appointments";
@@ -24,30 +25,16 @@ const WEEK_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
-function localKey(iso: string) {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function localMins(iso: string) {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes();
-}
-function toMins(t: string) {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
+// Local-time conversions are shared with the day view and the wizard
+const localKey = localDateStr;
+const fmtTime = fmtMins;
+
+/** Compact rail label: "9 AM" rather than "9:00 AM". */
 function fmtHour(mins: number) {
   const h = Math.floor(mins / 60);
   const p = h >= 12 ? "PM" : "AM";
   const dh = h % 12 === 0 ? 12 : h % 12;
   return `${dh} ${p}`;
-}
-function fmtTime(mins: number) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const p = h >= 12 ? "PM" : "AM";
-  const dh = h % 12 === 0 ? 12 : h % 12;
-  return `${dh}:${String(m).padStart(2, "0")} ${p}`;
 }
 
 /** Client photo, or their initials when there isn't one. */
@@ -99,7 +86,9 @@ export function WeekView({
   closures,
   availability,
   shortestServiceMins,
-  onSlotClick,
+  draft,
+  onSlotTap,
+  onDraftTap,
   onSlotRejected,
 }: {
   date: Date;
@@ -108,7 +97,10 @@ export function WeekView({
   closures: ClosureRange[];
   availability: AvailabilityDay[];
   shortestServiceMins: number;
-  onSlotClick: (dateStr: string, hhmm: string) => void;
+  /** The pencilled-in slot waiting for a second tap. */
+  draft: { date: string; time: string } | null;
+  onSlotTap: (dateStr: string, hhmm: string) => void;
+  onDraftTap: () => void;
   onSlotRejected: (verdict: SlotVerdict) => void;
 }) {
   const days = eachDayOfInterval({
@@ -257,24 +249,36 @@ export function WeekView({
                     shortestServiceMins,
                   });
 
+                  const hhmm = `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+                  const isDraft = draft?.date === key && draft.time === hhmm;
+
                   return (
                     <button
                       key={t}
                       onClick={() =>
-                        verdict.ok
-                          ? onSlotClick(
-                              key,
-                              `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`
-                            )
-                          : onSlotRejected(verdict)
+                        isDraft
+                          ? onDraftTap()
+                          : verdict.ok
+                            ? onSlotTap(key, hhmm)
+                            : onSlotRejected(verdict)
                       }
                       className={cn(
-                        "absolute left-0 right-0 transition-colors",
-                        verdict.ok ? "hover:bg-brand-light/60" : "hover:bg-border/30"
+                        "absolute left-0 right-0 transition-colors rounded",
+                        isDraft
+                          ? "z-10 border-2 border-dashed border-brand bg-brand-light flex items-center justify-center"
+                          : verdict.ok
+                            ? "hover:bg-brand-light/60"
+                            : "hover:bg-border/30"
                       )}
                       style={{ top: ((t - dayStart) / 60) * HOUR_H, height: HOUR_H / 2 }}
                       aria-label={`${fmtTime(t)} — ${verdict.ok ? "libre" : verdict.title}`}
-                    />
+                    >
+                      {isDraft && (
+                        <span className="text-[9px] font-bold text-brand leading-none tnum">
+                          {fmtTime(t)}
+                        </span>
+                      )}
+                    </button>
                   );
                 })}
 

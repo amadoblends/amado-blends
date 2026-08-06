@@ -7,6 +7,7 @@ import { es } from "date-fns/locale";
 import { Lock, Loader2, Clock } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { createClient } from "@/lib/supabase/client";
+import { toMins, fromMins, dateAt, fmtHHMM as fmtTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 const DURATIONS = [15, 30, 45, 60, 90, 120];
@@ -19,18 +20,7 @@ const REASONS = [
   { value: "otro", label: "Otro" },
 ];
 
-function fmtTime(hhmm: string) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const p = h >= 12 ? "PM" : "AM";
-  const dh = h % 12 === 0 ? 12 : h % 12;
-  return `${dh}:${String(m).padStart(2, "0")} ${p}`;
-}
-
-function addMinutesTo(hhmm: string, mins: number) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const total = h * 60 + m + mins;
-  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
+const addMinutesTo = (hhmm: string, mins: number) => fromMins(toMins(hhmm) + mins);
 
 /**
  * Blocks a single slot the barber already picked on the calendar, so it only
@@ -62,9 +52,7 @@ export function BlockHourQuick({
     setSaving(true);
 
     const supabase = createClient();
-    const [y, mo, d] = dateStr.split("-").map(Number);
-    const [sh, sm] = startTime.split(":").map(Number);
-    const starts = new Date(y, mo - 1, d, sh, sm, 0);
+    const starts = dateAt(dateStr, toMins(startTime));
     const ends = new Date(starts.getTime() + duration * 60000);
 
     const label = REASONS.find((r) => r.value === reason)?.label ?? "Bloqueado";

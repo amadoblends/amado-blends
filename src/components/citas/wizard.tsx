@@ -22,35 +22,32 @@ import { cn } from "@/lib/utils";
 import { createAppointment } from "@/lib/actions/appointments";
 import { createClientRecord, searchClients } from "@/lib/actions/clients";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
-import type { AvailabilityDay } from "@/lib/data/availability";
+import { toMins, fromMins, fmtHHMM as fmtSlot, dateAt } from "@/lib/time";
+import type { AvailabilityDay, BookingSettings } from "@/lib/data/availability";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const WEEK_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
 
-function toMins(t: string) {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-function fromMins(t: number) {
-  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
-}
-function fmtSlot(hhmm: string) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const p = h >= 12 ? "PM" : "AM";
-  const dh = h % 12 === 0 ? 12 : h % 12;
-  return `${dh}:${String(m).padStart(2, "0")} ${p}`;
-}
 interface BusyInterval {
   start: number; // epoch ms
   end: number;
 }
 
+/**
+ * Bookable start times for one day.
+ *
+ * A slot survives only if the whole service fits inside working hours, clears
+ * the break, doesn't collide with anything already booked or blocked (padded
+ * by the configured buffer on both sides), and hasn't already passed —
+ * including the minimum notice the barber configured.
+ */
 function generateSlots(
   day: AvailabilityDay,
   durMins: number,
   dateStr: string,
-  busy: BusyInterval[]
+  busy: BusyInterval[],
+  opts: { bufferMinutes: number; minNoticeMinutes: number }
 ): string[] {
   if (!day.is_active) return [];
   const start = toMins(day.start_time);
@@ -58,13 +55,22 @@ function generateSlots(
   const step = day.slot_minutes;
   const bS = day.break_start_time ? toMins(day.break_start_time) : null;
   const bE = day.break_end_time ? toMins(day.break_end_time) : null;
-  const [y, mo, d] = dateStr.split("-").map(Number);
+
+  const bufferMs = opts.bufferMinutes * 60000;
+  // Anything starting before this instant is in the past for booking purposes
+  const earliestMs = Date.now() + opts.minNoticeMinutes * 60000;
+
   const out: string[] = [];
   for (let t = start; t + durMins <= end; t += step) {
     if (bS !== null && bE !== null && t < bE && t + durMins > bS) continue;
-    const sMs = new Date(y, mo - 1, d, Math.floor(t / 60), t % 60, 0).getTime();
+
+    const sMs = dateAt(dateStr, t).getTime();
+    if (sMs < earliestMs) continue;
+
     const eMs = sMs + durMins * 60000;
-    if (busy.some((b) => sMs < b.end && eMs > b.start)) continue;
+    // Pad the candidate, not the existing rows, so the buffer applies both ways
+    if (busy.some((b) => sMs - bufferMs < b.end && eMs + bufferMs > b.start)) continue;
+
     out.push(fromMins(t));
   }
   return out;
@@ -106,20 +112,28 @@ export function AppointmentWizard({
   onSuccess,
   services,
   availability,
+  bookingSettings,
   defaultDate,
   defaultTime,
+  entry = "type",
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
   services: ServiceOption[];
   availability: AvailabilityDay[];
+  bookingSettings: BookingSettings;
   defaultDate: string;
   defaultTime?: string;
+  /**
+   * Where to start. The slot card already asked "walk-in or existing client?",
+   * so it opens the matching step directly instead of asking again.
+   */
+  entry?: "type" | "walkin" | "search";
 }) {
   // A slot tapped on the calendar seeds the date and time
   const initData: WizData = {
-    clientType: null,
+    clientType: entry === "walkin" ? "walkin" : entry === "search" ? "existing" : null,
     walkinName: "",
     client: null,
     service: null,
@@ -127,7 +141,7 @@ export function AppointmentWizard({
     time: defaultTime ?? "",
   };
 
-  const [step, setStep] = useState<Step>("type");
+  const [step, setStep] = useState<Step>(entry);
   const [data, setData] = useState<WizData>(initData);
   const [searchQ, setSearchQ] = useState("");
   const [searchRes, setSearchRes] = useState<ClientResult[]>([]);
@@ -140,6 +154,24 @@ export function AppointmentWizard({
   const [isPending, startTransition] = useTransition();
 
   const activeWeekdays = new Set(availability.filter((d) => d.is_active).map((d) => d.weekday));
+
+  // Re-seed each time it opens: the slot that launched it may have changed
+  useEffect(() => {
+    if (!open) return;
+    setStep(entry);
+    setData({
+      clientType: entry === "walkin" ? "walkin" : entry === "search" ? "existing" : null,
+      walkinName: "",
+      client: null,
+      service: null,
+      date: defaultDate,
+      time: defaultTime ?? "",
+    });
+    setSearchQ("");
+    setSearchRes([]);
+    setCalCursor(startOfMonth(new Date(defaultDate + "T00:00:00")));
+    setError(null);
+  }, [open, entry, defaultDate, defaultTime]);
 
   function getDayAvail(dateStr: string): AvailabilityDay | null {
     const wd = new Date(dateStr + "T00:00:00").getDay();
@@ -176,11 +208,16 @@ export function AppointmentWizard({
   const dayAvail = getDayAvail(data.date);
   const slots =
     data.service && dayAvail
-      ? generateSlots(dayAvail, data.service.duration_minutes, data.date, busy)
+      ? generateSlots(dayAvail, data.service.duration_minutes, data.date, busy, {
+          bufferMinutes: bookingSettings.buffer_minutes,
+          // The barber books in person, so their own minimum notice is zero;
+          // the setting exists to stop clients booking a minute in advance.
+          minNoticeMinutes: 0,
+        })
       : [];
 
   function reset() {
-    setStep("type");
+    setStep(entry);
     setData({ ...initData, date: defaultDate, time: defaultTime ?? "" });
     setSearchQ("");
     setSearchRes([]);
@@ -194,10 +231,13 @@ export function AppointmentWizard({
   }
 
   function goBack() {
+    // When the slot card already picked the client type, "type" is not a step
+    // the barber should be able to fall back into.
+    const first = entry === "type" ? "type" : null;
     const prev: Record<Step, Step | null> = {
       type: null,
-      walkin: "type",
-      search: "type",
+      walkin: first,
+      search: first,
       service: data.clientType === "walkin" ? "walkin" : "search",
       datetime: "service",
       confirm: "datetime",

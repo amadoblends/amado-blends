@@ -8,6 +8,9 @@ import type { ActionResult } from "@/lib/actions/appointments";
 const businessSchema = z.object({
   name: z.string().trim().min(2).max(80),
   logoUrl: z.string().url().max(2000).optional().or(z.literal("")),
+  coverUrl: z.string().url().max(2000).optional().or(z.literal("")),
+  description: z.string().trim().max(200).optional().or(z.literal("")),
+  instagram: z.string().trim().max(60).optional().or(z.literal("")),
   address: z.string().trim().max(200).optional().or(z.literal("")),
   phone: z.string().trim().max(30).optional().or(z.literal("")),
 });
@@ -22,6 +25,9 @@ export async function updateBusiness(formData: FormData): Promise<ActionResult> 
   const parsed = businessSchema.safeParse({
     name: formData.get("name"),
     logoUrl: formData.get("logoUrl") || "",
+    coverUrl: formData.get("coverUrl") || "",
+    description: formData.get("description") || "",
+    instagram: formData.get("instagram") || "",
     address: formData.get("address") || "",
     phone: formData.get("phone") || "",
   });
@@ -32,6 +38,9 @@ export async function updateBusiness(formData: FormData): Promise<ActionResult> 
       id: 1,
       name: parsed.data.name,
       logo_url: parsed.data.logoUrl || null,
+      cover_url: parsed.data.coverUrl || null,
+      description: parsed.data.description || null,
+      instagram: parsed.data.instagram?.replace(/^@/, "") || null,
       address: parsed.data.address || null,
       phone: parsed.data.phone || null,
       updated_at: new Date().toISOString(),
@@ -47,7 +56,7 @@ export async function updateBusiness(formData: FormData): Promise<ActionResult> 
     return {
       ok: false,
       error: missing
-        ? "Falta la tabla del negocio. Corre migration_20_branding.sql en Supabase."
+        ? "Faltan tablas o columnas del negocio. Corre migration_20_branding.sql y migration_21_business_identity.sql en Supabase."
         : `No se pudo guardar: ${error.message}`,
     };
   }

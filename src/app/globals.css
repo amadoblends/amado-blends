@@ -101,14 +101,46 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/*
+ * Native feel: no long-press text selection, no iOS callout bubble, no image
+ * drag, no browser context menu. Everything the barber can actually edit opts
+ * back in below, so typing and copying inside fields still work normally.
+ */
 * {
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"],
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+}
+
+img,
+a {
+  -webkit-user-drag: none;
 }
 
 html,
 body {
   height: 100%;
   overscroll-behavior-y: none;
+  /* Kill the rubber-band bounce that reveals the page is a web view */
+  overscroll-behavior-x: none;
+}
+
+/* Taps act immediately instead of waiting on a double-tap-zoom guess */
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
 }
 
 body {

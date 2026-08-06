@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Playfair_Display, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PwaRegister } from "@/components/pwa-register";
+import { NativeShell } from "@/components/native-shell";
 import { ThemeScript } from "@/components/theme/theme-provider";
 
 // UI type: geometric, tight, excellent lining numerals for the calendar
@@ -67,6 +68,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <PwaRegister />
+        <NativeShell />
         <div className="app-shell flex flex-col">{children}</div>
       </body>
     </html>

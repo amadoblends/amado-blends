@@ -11,16 +11,23 @@ import { updateBusiness } from "@/lib/actions/business";
 export function BusinessForm({
   name,
   logoUrl: initialLogo,
+  coverUrl: initialCover,
+  description,
+  instagram,
   address,
   phone,
 }: {
   name: string;
   logoUrl: string | null;
+  coverUrl: string | null;
+  description: string;
+  instagram: string;
   address: string;
   phone: string;
 }) {
   const router = useRouter();
   const [logoUrl, setLogoUrl] = useState(initialLogo);
+  const [coverUrl, setCoverUrl] = useState(initialCover);
   const [businessName, setBusinessName] = useState(name);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +37,7 @@ export function BusinessForm({
     setError(null);
     setSaved(false);
     formData.set("logoUrl", logoUrl ?? "");
+    formData.set("coverUrl", coverUrl ?? "");
 
     startTransition(async () => {
       const result = await updateBusiness(formData);
@@ -80,6 +88,28 @@ export function BusinessForm({
           <ImageUploader folder="products" value={logoUrl} onChange={setLogoUrl} />
         </div>
 
+        {/* Cover: the first thing the client sees when they open the app */}
+        <div className="bg-surface rounded-2xl border border-border p-4 space-y-4">
+          <div className="flex items-start gap-2">
+            <ImageIcon size={15} className="text-brand shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Imagen de portada</p>
+              <p className="text-xs text-muted mt-0.5">
+                Encabeza la pantalla de inicio de tus clientes. Usa una foto ancha del local
+                o de tu trabajo.
+              </p>
+            </div>
+          </div>
+
+          {coverUrl && (
+            <div className="relative w-full aspect-[16/7] rounded-xl overflow-hidden border border-border">
+              <Image src={coverUrl} alt="" fill sizes="100vw" className="object-cover" />
+            </div>
+          )}
+
+          <ImageUploader folder="products" value={coverUrl} onChange={setCoverUrl} />
+        </div>
+
         <div className="bg-surface rounded-2xl border border-border p-4 space-y-4">
           <Field label="Nombre del negocio">
             <input
@@ -88,6 +118,27 @@ export function BusinessForm({
               maxLength={80}
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
+              className="form-input"
+            />
+          </Field>
+
+          <Field label="Descripción corta (la ven tus clientes al abrir la app)">
+            <textarea
+              name="description"
+              rows={2}
+              maxLength={200}
+              defaultValue={description}
+              placeholder="Ej. Barbería clásica en Bayamón. Cortes, barba y diseño."
+              className="form-input resize-none"
+            />
+          </Field>
+
+          <Field label="Instagram (opcional)">
+            <input
+              name="instagram"
+              maxLength={60}
+              defaultValue={instagram}
+              placeholder="@amadoblends"
               className="form-input"
             />
           </Field>

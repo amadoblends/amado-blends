@@ -5,16 +5,27 @@ import { ThemeProvider, type Theme } from "@/components/theme/theme-provider";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
+
+  /*
+   * This layout re-runs on every navigation, so nothing here waits on anything
+   * else: branding doesn't depend on the user, so it goes out at the same time
+   * as the auth check rather than after it.
+   */
+  const businessPromise = supabase
+    .from("business_settings")
+    .select("name, logo_url")
+    .eq("id", 1)
+    .maybeSingle();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const [{ data: profile }, { data: business }] = await Promise.all([
     user
-      ? supabase.from("profiles").select("theme").eq("id", user.id).single()
+      ? supabase.from("profiles").select("theme").eq("id", user.id).maybeSingle()
       : Promise.resolve({ data: null }),
-    // Business branding is separate from the barber's own photo
-    supabase.from("business_settings").select("name, logo_url").eq("id", 1).maybeSingle(),
+    businessPromise,
   ]);
 
   const theme: Theme = profile?.theme === "light" ? "light" : "dark";

@@ -7,42 +7,23 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { displayAppointmentName } from "@/lib/guests";
 import { PhotoLightbox } from "@/components/ui/photo-lightbox";
 import { checkSlot, type SlotVerdict } from "@/lib/slot-availability";
+import {
+  toMins, fromMins, localMins, localDateStr, fmtMins, durationMins, todayStr,
+} from "@/lib/time";
 import type { AppointmentRow, BlockedRange, ClosureRange } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 
 /*
- * Duration is expressed by WHERE a block sits on the hour rail, never by how
- * tall it is: every appointment card is the same size so they stay readable
- * and comparable. The rail is spaced so a half-hour still leaves a clear gap
- * between two consecutive cards.
+ * Duration is expressed by WHERE a card sits on the hour rail and by the time
+ * range it covers — never by how tall it is. Every card is the same height so
+ * the day reads as one uniform column.
+ *
+ * The rail is spaced so the shortest normal gap (half an hour) still leaves a
+ * clean margin between two consecutive cards.
  */
 const HOUR_H = 124;
-const BLOCK_H = 60;
-const BLOCK_GAP = 5;
-
-function toMins(t: string) {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-
-function localMins(iso: string) {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes();
-}
-
-function fmtMins(mins: number) {
-  const total = Math.floor(mins);
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  const p = h >= 12 ? "PM" : "AM";
-  const dh = h % 12 === 0 ? 12 : h % 12;
-  return `${dh}:${String(m).padStart(2, "0")} ${p}`;
-}
-
-function localDateStr(iso: string) {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+const BLOCK_H = 56;
+const BLOCK_GAP = 6;
 
 const STATUS_LABEL: Record<string, string> = {
   confirmada: "Confirmada",
@@ -116,11 +97,11 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-/** Client photos keep their colour even inside a grey block. */
+/** Client photos keep their colour even inside a grey card. */
 function Avatar({
   name,
   avatarUrl,
-  size = 38,
+  size = 36,
   onExpand,
 }: {
   name: string;
@@ -176,8 +157,10 @@ function DayTimelineBase({
   blockedTimes = [],
   closure = null,
   shortestServiceMins,
+  draft,
   onSelect,
-  onSlotPick,
+  onSlotTap,
+  onDraftTap,
   onSlotRejected,
 }: {
   appointments: AppointmentRow[];
@@ -186,11 +169,13 @@ function DayTimelineBase({
   blockedTimes?: BlockedRange[];
   closure?: ClosureRange | null;
   shortestServiceMins: number;
-  /** Opens the detail card instead of navigating away. */
+  /** The pencilled-in slot waiting for a second tap. */
+  draft: { date: string; time: string } | null;
   onSelect?: (a: AppointmentRow) => void;
-  /** A free slot the barber may book. */
-  onSlotPick?: (dateStr: string, hhmm: string) => void;
-  /** A slot that can't take an appointment, with the reason why. */
+  /** First tap on free time — pencils in the placeholder. */
+  onSlotTap?: (dateStr: string, hhmm: string) => void;
+  /** Second tap, on the placeholder itself — opens the action card. */
+  onDraftTap?: () => void;
   onSlotRejected?: (verdict: SlotVerdict) => void;
 }) {
   const [photo, setPhoto] = useState<{ src: string | null; name: string } | null>(null);
@@ -206,8 +191,7 @@ function DayTimelineBase({
     [blockedTimes, dateStr]
   );
 
-  const isToday = dateStr === localDateStr(new Date().toISOString());
-  const nowMins = useNowMins(isToday);
+  const nowMins = useNowMins(dateStr === todayStr());
 
   if (!dayAvail?.is_active) {
     return (
@@ -227,16 +211,15 @@ function DayTimelineBase({
   const hours: number[] = [];
   for (let t = Math.ceil(dayStart / 60) * 60; t <= dayEnd; t += 60) hours.push(t);
 
-  // Shared shape for every availability question asked on this day
   const busyApts = appointments.map((a) => ({
     start: localMins(a.starts_at),
-    end: localMins(a.starts_at) + (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000,
+    end: localMins(a.starts_at) + durationMins(a.starts_at, a.ends_at),
     label: a.guest_name ?? a.client.full_name,
   }));
   const busyBlocks = blocked.map((b) => ({
     start: localMins(b.starts_at),
-    end: localMins(b.starts_at) + (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000,
-    label: b.reason ?? null,
+    end: localMins(b.starts_at) + durationMins(b.starts_at, b.ends_at),
+    label: b.reason ?? undefined,
   }));
 
   const ctxFor = (slotMins: number) => ({
@@ -250,20 +233,21 @@ function DayTimelineBase({
     },
     closure: closure ? { reason: closure.reason, description: closure.description } : null,
     appointments: busyApts,
-    blocked: busyBlocks.map((b) => ({ ...b, label: b.label ?? undefined })),
+    blocked: busyBlocks,
     shortestServiceMins,
   });
 
-  // Every slot on the rail, so free time is tappable and busy time explains itself
   const slots: number[] = [];
   for (let t = dayStart; t + step <= dayEnd; t += step) slots.push(t);
 
   function handleSlot(slotMins: number) {
     const verdict = checkSlot(ctxFor(slotMins));
-    const hhmm = `${String(Math.floor(slotMins / 60)).padStart(2, "0")}:${String(slotMins % 60).padStart(2, "0")}`;
-    if (verdict.ok) onSlotPick?.(dateStr, hhmm);
+    if (verdict.ok) onSlotTap?.(dateStr, fromMins(slotMins));
     else onSlotRejected?.(verdict);
   }
+
+  const draftMins =
+    draft && draft.date === dateStr ? toMins(draft.time) : null;
 
   // Ordered tops let a card shrink rather than cover the next one
   const sorted = [...appointments].sort(
@@ -272,12 +256,6 @@ function DayTimelineBase({
 
   return (
     <div>
-      {appointments.length === 0 && blocked.length === 0 && (
-        <p className="text-xs text-muted text-center py-4">
-          Sin citas — toca una hora libre para crear una
-        </p>
-      )}
-
       <div className="relative flex">
         {/* Hour rail — the only thing that expresses real duration */}
         <div className="w-[54px] shrink-0 relative" style={{ height: totalH + 16 }}>
@@ -302,29 +280,15 @@ function DayTimelineBase({
           ))}
 
           {/* Tap targets underneath everything else */}
-          {slots.map((t) => {
-            const verdict = checkSlot(ctxFor(t));
-            return (
-              <button
-                key={t}
-                onClick={() => handleSlot(t)}
-                aria-label={`${fmtMins(t)} — ${verdict.ok ? "libre" : verdict.title}`}
-                className={cn(
-                  "absolute left-0 right-0 rounded-xl group",
-                  verdict.ok ? "active:bg-brand-light/60" : "active:bg-border/40"
-                )}
-                style={{ top: ((t - dayStart) / 60) * HOUR_H, height: (step / 60) * HOUR_H }}
-              >
-                {verdict.ok && (
-                  <span className="absolute inset-y-0 right-2 flex items-center opacity-0 group-active:opacity-100">
-                    <span className="w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center">
-                      <Plus size={13} strokeWidth={3} />
-                    </span>
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          {slots.map((t) => (
+            <button
+              key={t}
+              onClick={() => handleSlot(t)}
+              aria-label={`${fmtMins(t)}`}
+              className="absolute left-0 right-0 rounded-xl active:bg-surface/60"
+              style={{ top: ((t - dayStart) / 60) * HOUR_H, height: (step / 60) * HOUR_H }}
+            />
+          ))}
 
           {/* Break shading */}
           {breakStart !== null && breakEnd !== null && (
@@ -343,15 +307,14 @@ function DayTimelineBase({
           {/* Blocked hours */}
           {blocked.map((b) => {
             const sMins = localMins(b.starts_at);
-            const durMins =
-              (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000;
+            const dur = durationMins(b.starts_at, b.ends_at);
             return (
               <div
                 key={b.id}
                 className="absolute left-0 right-0 rounded-2xl flex items-center justify-center gap-1.5 pointer-events-none"
                 style={{
                   top: ((sMins - dayStart) / 60) * HOUR_H,
-                  height: Math.max((durMins / 60) * HOUR_H - BLOCK_GAP, 24),
+                  height: Math.max((dur / 60) * HOUR_H - BLOCK_GAP, 24),
                   background:
                     "repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 12px)",
                 }}
@@ -364,22 +327,43 @@ function DayTimelineBase({
             );
           })}
 
-          {/* Appointment cards — same size for every appointment */}
+          {/* Pencilled-in slot: tap once to place, again to choose what to do */}
+          {draftMins !== null && (
+            <button
+              onClick={onDraftTap}
+              className="absolute left-0 right-0 rounded-2xl border-2 border-dashed border-brand bg-brand-light flex items-center justify-between px-3 z-10 animate-view-in"
+              style={{ top: ((draftMins - dayStart) / 60) * HOUR_H, height: BLOCK_H }}
+            >
+              <span className="text-left">
+                <span className="block text-[11px] font-bold text-brand tnum">
+                  {fmtMins(draftMins)}
+                </span>
+                <span className="block text-[13px] font-bold text-foreground">
+                  Toca para continuar
+                </span>
+              </span>
+              <span className="w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center shrink-0">
+                <Plus size={16} strokeWidth={3} />
+              </span>
+            </button>
+          )}
+
+          {/* Appointment cards — identical size for every appointment */}
           {sorted.map((a, i) => {
             const sMins = localMins(a.starts_at);
-            const durMins =
-              (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000;
-            const eMins = sMins + durMins;
+            const dur = durationMins(a.starts_at, a.ends_at);
+            const eMins = sMins + dur;
             const top = ((sMins - dayStart) / 60) * HOUR_H;
 
-            // Never let a fixed-height card sit on top of the next one
+            // Only shrinks when the next appointment starts sooner than the
+            // card is tall, which keeps them from overlapping.
             const nextStart = sorted[i + 1] ? localMins(sorted[i + 1].starts_at) : null;
             const roomPx =
               nextStart === null
                 ? Number.POSITIVE_INFINITY
                 : ((nextStart - sMins) / 60) * HOUR_H - BLOCK_GAP;
             const height = Math.max(Math.min(BLOCK_H, roomPx), 34);
-            const tight = height < BLOCK_H - 8;
+            const tight = height < BLOCK_H - 6;
 
             const running = nowMins !== null && nowMins >= sMins && nowMins < eMins;
             const finished = nowMins !== null ? nowMins >= eMins : false;
@@ -408,7 +392,16 @@ function DayTimelineBase({
                 )}
                 style={{ top, height }}
               >
-                <div className="flex items-center gap-2.5 h-full px-2.5">
+                {/* Left rail carries the status colour */}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute inset-y-0 left-0 w-[3px] rounded-full",
+                    warm ? "bg-brand" : "bg-muted/50"
+                  )}
+                />
+
+                <div className="flex items-center gap-2.5 h-full pl-3 pr-3">
                   <Avatar
                     name={a.guest_name ?? a.client.full_name}
                     avatarUrl={a.guest_name ? null : a.client.avatar_url}
@@ -435,7 +428,7 @@ function DayTimelineBase({
                     </p>
                     {!tight && (
                       <p className="text-[11px] font-medium text-muted truncate leading-tight">
-                        {a.service.name} · {formatCurrency(a.price)}
+                        {a.service.name}
                       </p>
                     )}
                   </div>
@@ -449,13 +442,23 @@ function DayTimelineBase({
                         )}
                       />
                       <span className="text-[11px] font-bold text-foreground tnum">
-                        {Math.round(durMins)}m
+                        {Math.round(dur)}m
                       </span>
                     </span>
                     {!tight && (
-                      <span className="text-[9px] font-semibold text-muted leading-none">
-                        {STATUS_LABEL[a.status] ?? a.status}
-                      </span>
+                      <>
+                        <span
+                          className={cn(
+                            "text-[9px] font-semibold leading-none",
+                            warm ? "text-brand" : "text-muted"
+                          )}
+                        >
+                          {STATUS_LABEL[a.status] ?? a.status}
+                        </span>
+                        <span className="text-[11px] font-bold text-foreground leading-none tnum">
+                          {formatCurrency(a.price)}
+                        </span>
+                      </>
                     )}
                   </div>
                 </div>
@@ -463,7 +466,7 @@ function DayTimelineBase({
             );
           })}
 
-          {/* Drawn last so it rides on top of the blocks it crosses */}
+          {/* Drawn last so it rides on top of the cards it crosses */}
           <NowIndicator nowMins={nowMins} dayStart={dayStart} dayEnd={dayEnd} />
         </div>
       </div>

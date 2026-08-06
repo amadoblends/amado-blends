@@ -13,6 +13,7 @@ import {
   ChevronRight,
   ShieldCheck,
   CalendarClock,
+  CalendarOff,
   UserCircle,
   BadgePercent,
   BarChart3,
@@ -27,6 +28,7 @@ const menu = [
   { href: "/carrusel", label: "Carrusel del cliente", icon: Images },
   { href: "/negocio", label: "Negocio y logo", icon: Store },
   { href: "/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
+  { href: "/disponibilidad/bloqueos", label: "Disponibilidad y bloqueos", icon: CalendarOff },
 ];
 
 export default async function MorePage() {

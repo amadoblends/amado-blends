@@ -12,7 +12,7 @@ import {
   type AppointmentRow,
   type LiteAppointment,
 } from "@/lib/data/appointments";
-import { getAvailability } from "@/lib/data/availability";
+import { getAvailability, getBookingSettings } from "@/lib/data/availability";
 import { createClient } from "@/lib/supabase/server";
 import { CalendarShell } from "@/components/citas/calendar-shell";
 import type { CalendarView } from "@/components/citas/calendar-toolbar";
@@ -67,6 +67,7 @@ export default async function CitasPage({
     liteAppointments,
     appointmentStarts,
     availability,
+    bookingSettings,
     blockedTimes,
     closures,
     { data: servicesData },
@@ -81,6 +82,7 @@ export default async function CitasPage({
       : getAppointmentsLite(rangeStart, rangeEnd),
     view === "day" ? getAppointmentStarts(stripStart, stripEnd) : Promise.resolve([]),
     getAvailability(),
+    getBookingSettings(),
     // The week grid needs every day's blocks, not just the selected one
     heavy ? getBlockedTimesInRange(rangeStart, rangeEnd) : Promise.resolve([]),
     getClosures(),
@@ -112,6 +114,7 @@ export default async function CitasPage({
         dayAvail={dayAvail}
         availability={availability}
         services={servicesData ?? []}
+        bookingSettings={bookingSettings}
         blockedTimes={blockedTimes}
         closures={closures}
         dayCounts={dayCounts}
