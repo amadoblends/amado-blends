@@ -5,7 +5,9 @@ import {
   addDays, addMonths, addYears, subDays, subMonths, subYears, format, startOfWeek, endOfWeek,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Search, Plus, Lock, CalendarOff } from "lucide-react";
+import {
+  ChevronLeft, ChevronRight, Search, Plus, Lock, CalendarOff, Calendar as CalendarIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type CalendarView = "day" | "week" | "month" | "year";
@@ -20,19 +22,25 @@ const VIEWS: { key: CalendarView; label: string }[] = [
 export function CalendarToolbar({
   view,
   date,
+  displayDate,
   onNewAppointment,
   onBlockHours,
   onCloseDays,
   onSearch,
+  onToday,
 }: {
   view: CalendarView;
   date: Date;
+  /** Month shown in the title — follows the day strip while scrolling. */
+  displayDate?: Date;
   onNewAppointment: () => void;
   onBlockHours: () => void;
   onCloseDays: () => void;
   onSearch: () => void;
+  onToday?: () => void;
 }) {
   const router = useRouter();
+  const titleDate = displayDate ?? date;
 
   function go(nextDate: Date, nextView: CalendarView = view) {
     router.push(`/citas?view=${nextView}&date=${format(nextDate, "yyyy-MM-dd")}`);
@@ -48,9 +56,10 @@ export function CalendarToolbar({
     go(move(date, 1));
   }
 
+  // On day view the header follows the strip, so it shows month + year only
   const title =
     view === "day"
-      ? format(date, "d 'de' MMMM yyyy", { locale: es })
+      ? format(titleDate, "MMMM yyyy", { locale: es })
       : view === "week"
         ? `${format(startOfWeek(date, { weekStartsOn: 1 }), "d MMM", { locale: es })} – ${format(endOfWeek(date, { weekStartsOn: 1 }), "d MMM yyyy", { locale: es })}`
         : view === "month"
@@ -73,11 +82,17 @@ export function CalendarToolbar({
           >
             <ChevronLeft size={16} />
           </button>
+          {/* Calendar glyph carrying today's date */}
           <button
-            onClick={() => go(new Date())}
-            className="h-9 px-3 rounded-xl border border-border bg-surface text-xs font-semibold text-foreground active:bg-background"
+            onClick={() => (onToday ? onToday() : go(new Date()))}
+            aria-label="Ir a hoy"
+            title="Ir a hoy"
+            className="relative w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background"
           >
-            Hoy
+            <CalendarIcon size={19} className="text-muted" strokeWidth={1.6} />
+            <span className="absolute inset-x-0 bottom-[7px] text-[9px] font-black text-foreground leading-none">
+              {format(new Date(), "d")}
+            </span>
           </button>
           <button
             onClick={() => shift(1)}

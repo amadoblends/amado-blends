@@ -6,6 +6,8 @@ const statusStyles: Record<AppointmentStatus, string> = {
   pendiente: "bg-warning-light text-warning",
   completada: "bg-info-light text-info",
   cancelada: "bg-danger-light text-danger",
+  // A no-show is the client's absence, not a cancellation by the shop
+  no_show: "bg-warning-light text-warning",
 };
 
 const statusLabels: Record<AppointmentStatus, string> = {
@@ -13,6 +15,7 @@ const statusLabels: Record<AppointmentStatus, string> = {
   pendiente: "Pendiente",
   completada: "Completada",
   cancelada: "Cancelada",
+  no_show: "No asistió",
 };
 
 export function StatusBadge({ status }: { status: AppointmentStatus }) {

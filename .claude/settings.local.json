@@ -55,7 +55,15 @@
       "Bash(sed -i 's|return generateSlots\\(av, service.duration_minutes, minNoticeMinutes, ds, busy\\).length;|return generateSlots\\(av, service.duration_minutes, minNoticeMinutes, ds, busy, slotOptions\\).length;|' src/components/booking/booking-wizard.tsx)",
       "Bash(git commit -m 'Split no_show out of migration 17: status is an enum, not a check *)",
       "Bash(grep -n '^  \\);$' src/components/booking/booking-wizard.tsx)",
-      "Bash(perl -0pi -e 's/  function togglePinned\\\\\\(\\\\\\) \\\\{\\\\n    setPinned\\\\\\(\\\\\\(prev\\\\\\) => \\\\{\\\\n      const next = !prev;\\\\n      try \\\\{\\\\n        localStorage\\\\.setItem\\\\\\(STORAGE_KEY, String\\\\\\(next\\\\\\)\\\\\\);\\\\n      \\\\} catch \\\\{\\\\n        \\\\/\\\\/ ignore\\\\n      \\\\}\\\\n      return next;\\\\n    \\\\}\\\\\\);\\\\n  \\\\}\\\\n\\\\n//' src/components/sidebar.tsx)"
+      "Bash(perl -0pi -e 's/  function togglePinned\\\\\\(\\\\\\) \\\\{\\\\n    setPinned\\\\\\(\\\\\\(prev\\\\\\) => \\\\{\\\\n      const next = !prev;\\\\n      try \\\\{\\\\n        localStorage\\\\.setItem\\\\\\(STORAGE_KEY, String\\\\\\(next\\\\\\)\\\\\\);\\\\n      \\\\} catch \\\\{\\\\n        \\\\/\\\\/ ignore\\\\n      \\\\}\\\\n      return next;\\\\n    \\\\}\\\\\\);\\\\n  \\\\}\\\\n\\\\n//' src/components/sidebar.tsx)",
+      "Bash(grep -n 'href={`/citas/\\\\${a.id}`}' src/components/citas/timeline.tsx)",
+      "Bash(sed -i '4d' src/components/citas/timeline.tsx)",
+      "Bash(perl -pi -e 's/status: \"confirmada\" \\\\| \"pendiente\" \\\\| \"completada\" \\\\| \"cancelada\";/status: AppointmentStatus;/g' src/lib/data/appointments.ts)",
+      "Bash(perl -pi -e 's/^import \\\\{ createClient \\\\} from \"\\\\@\\\\/lib\\\\/supabase\\\\/server\";$/import { createClient } from \"\\\\@\\\\/lib\\\\/supabase\\\\/server\";\\\\nimport type { AppointmentStatus } from \"\\\\@\\\\/lib\\\\/supabase\\\\/types\";/ if $. < 5' src/lib/data/appointments.ts)",
+      "Bash(perl -pi -e 's/export type AppointmentStatus = \"confirmada\" \\\\| \"pendiente\" \\\\| \"completada\" \\\\| \"cancelada\";/export type AppointmentStatus =\\\\n  | \"confirmada\"\\\\n  | \"pendiente\"\\\\n  | \"completada\"\\\\n  | \"cancelada\"\\\\n  | \"no_show\";/' src/lib/supabase/types.ts)",
+      "Bash(sed -i '/import { DateStrip } from \"@\\\\/components\\\\/citas\\\\/date-strip\";/d' \"src/app/\\(admin\\)/citas/page.tsx\")",
+      "Bash(sed -i 's|  startOfYear, endOfYear, startOfDay, endOfDay, addDays,|  startOfYear, endOfYear, startOfDay, endOfDay, addDays,|' \"src/app/\\(admin\\)/citas/page.tsx\")",
+      "Bash(git commit -m 'Mobile calendar: swipeable day strip, compact blocks, detail sheet *)"
     ]
   }
 }

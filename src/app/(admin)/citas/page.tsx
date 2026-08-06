@@ -12,7 +12,6 @@ import {
 } from "@/lib/data/appointments";
 import { getAvailability, getBookingSettings } from "@/lib/data/availability";
 import { createClient } from "@/lib/supabase/server";
-import { DateStrip } from "@/components/citas/date-strip";
 import { CalendarShell } from "@/components/citas/calendar-shell";
 import type { CalendarView } from "@/components/citas/calendar-toolbar";
 
@@ -48,8 +47,9 @@ export default async function CitasPage({
   await autoCompletePastAppointments();
 
   const [rangeStart, rangeEnd] = rangeFor(view, date);
-  const weekStart = startOfWeek(date, { weekStartsOn: 1 });
-  const weekEnd = addDays(weekStart, 5);
+  // The day strip scrolls two months either way, so it needs that whole span
+  const stripStart = addDays(date, -60);
+  const stripEnd = addDays(date, 60);
 
   const [
     appointments,
@@ -61,23 +61,26 @@ export default async function CitasPage({
   ] = await Promise.all([
     // The day view has its own richer query; other views use the range one
     view === "day" ? getAppointmentsForDay(date) : getAppointmentsInRange(rangeStart, rangeEnd),
-    view === "day" ? getAppointmentStarts(weekStart, weekEnd) : Promise.resolve([]),
+    view === "day" ? getAppointmentStarts(stripStart, stripEnd) : Promise.resolve([]),
     getAvailability(),
     getBlockedTimesForDay(date),
     getClosures(),
     supabase.from("services").select("id, name, duration_minutes, price, color").order("name"),
   ]);
 
+  // Grouped in the barber's timezone, not the server's
+  const dayCounts: Record<string, number> = {};
+  for (const iso of appointmentStarts) {
+    const d = new Date(iso);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    dayCounts[key] = (dayCounts[key] ?? 0) + 1;
+  }
+
   const dayAvail =
     availability.find((d) => d.weekday === date.getDay() && d.is_active) ?? null;
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-4">
-      {/* The week strip only makes sense alongside the single-day timeline */}
-      {view === "day" && (
-        <DateStrip selected={dateStr} appointmentStarts={appointmentStarts} />
-      )}
-
+    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-3">
       <CalendarShell
         view={view}
         date={date}
@@ -88,6 +91,7 @@ export default async function CitasPage({
         services={servicesData ?? []}
         blockedTimes={blockedTimes}
         closures={closures}
+        dayCounts={dayCounts}
       />
     </div>
   );

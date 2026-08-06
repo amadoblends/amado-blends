@@ -12,6 +12,9 @@ import { BlockHourQuick } from "./block-hour-quick";
 import { ClosureModal } from "./closure-modal";
 import { CalendarToolbar, type CalendarView } from "./calendar-toolbar";
 import { WeekView, MonthView, YearView, closureFor } from "./calendar-views";
+import { DayStripScroller } from "./day-strip-scroller";
+import { AppointmentSheet } from "./appointment-sheet";
+import { RescheduleModal } from "./reschedule-modal";
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
 import { SearchModal } from "@/components/search-modal";
 import { Modal } from "@/components/ui/modal";
@@ -33,6 +36,7 @@ export function CalendarShell({
   services,
   blockedTimes = [],
   closures = [],
+  dayCounts = {},
 }: {
   view: CalendarView;
   date: Date;
@@ -43,6 +47,7 @@ export function CalendarShell({
   services: ServiceOption[];
   blockedTimes?: BlockedRange[];
   closures?: ClosureRange[];
+  dayCounts?: Record<string, number>;
 }) {
   const router = useRouter();
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -55,6 +60,11 @@ export function CalendarShell({
   const [wizardSeed, setWizardSeed] = useState<{ date: string; time: string } | null>(null);
   // Blocking a slot picked on the calendar keeps its date and start time
   const [quickBlock, setQuickBlock] = useState<{ date: string; time: string } | null>(null);
+  // Tapping a block opens the sheet; the profile stays a further tap away
+  const [selected, setSelected] = useState<AppointmentRow | null>(null);
+  const [rescheduling, setRescheduling] = useState<AppointmentRow | null>(null);
+  // Title follows the day strip while it's being swiped
+  const [visibleMonth, setVisibleMonth] = useState<Date | undefined>(undefined);
 
   const todaysClosure = closureFor(date, closures);
 
@@ -71,11 +81,25 @@ export function CalendarShell({
       <CalendarToolbar
         view={view}
         date={date}
+        displayDate={view === "day" ? visibleMonth : undefined}
         onNewAppointment={() => openWizardAt(null)}
         onBlockHours={() => setBlockOpen(true)}
         onCloseDays={() => setClosureOpen(true)}
         onSearch={() => setSearchOpen(true)}
+        onToday={() => {
+          setVisibleMonth(undefined);
+          router.push(`/citas?view=day&date=${format(new Date(), "yyyy-MM-dd")}`);
+        }}
       />
+
+      {/* Day strip sits between the header and the timeline */}
+      {view === "day" && (
+        <DayStripScroller
+          selected={dateStr}
+          counts={dayCounts}
+          onVisibleMonthChange={setVisibleMonth}
+        />
+      )}
 
       {/* Closure banner on the day being viewed */}
       {todaysClosure && view === "day" && (
@@ -96,6 +120,7 @@ export function CalendarShell({
           dayAvail={dayAvail}
           dateStr={dateStr}
           blockedTimes={blockedTimes}
+          onSelect={setSelected}
         />
       )}
 
@@ -209,6 +234,25 @@ export function CalendarShell({
       />
 
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      <AppointmentSheet
+        appointment={selected}
+        onClose={() => setSelected(null)}
+        onReschedule={setRescheduling}
+      />
+
+      {rescheduling && (
+        <RescheduleModal
+          open
+          onClose={() => setRescheduling(null)}
+          appointmentId={rescheduling.id}
+          currentServiceId={rescheduling.service.id}
+          currentStartsAt={rescheduling.starts_at}
+          currentEndsAt={rescheduling.ends_at}
+          services={services}
+          availability={availability}
+        />
+      )}
     </div>
   );
 }

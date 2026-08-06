@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { AppointmentStatus } from "@/lib/supabase/types";
 import { startOfDay, endOfDay } from "date-fns";
 
 export interface AppointmentProduct {
@@ -11,7 +12,7 @@ export interface AppointmentRow {
   id: string;
   starts_at: string;
   ends_at: string;
-  status: "confirmada" | "pendiente" | "completada" | "cancelada";
+  status: AppointmentStatus;
   price: number;
   client: { id: string; full_name: string; avatar_url: string | null };
   service: { id: string; name: string; color: string };
@@ -78,7 +79,7 @@ export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[
 export interface HistoryRow {
   id: string;
   starts_at: string;
-  status: "confirmada" | "pendiente" | "completada" | "cancelada";
+  status: AppointmentStatus;
   price: number;
   client_name: string;
   service_name: string;

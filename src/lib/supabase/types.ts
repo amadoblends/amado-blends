@@ -1,4 +1,9 @@
-export type AppointmentStatus = "confirmada" | "pendiente" | "completada" | "cancelada";
+export type AppointmentStatus =
+  | "confirmada"
+  | "pendiente"
+  | "completada"
+  | "cancelada"
+  | "no_show";
 export type ClientSegment = "frecuente" | "nuevo" | "inactivo" | "regular";
 export type NoteType = "preferencias" | "productos" | "estilo" | "otros";
 export type StockLevel = "ok" | "bajo" | "critico";

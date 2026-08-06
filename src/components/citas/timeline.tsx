@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import Image from "next/image";
 import { ShoppingBag, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -138,11 +137,14 @@ export function DayTimeline({
   dayAvail,
   dateStr,
   blockedTimes = [],
+  onSelect,
 }: {
   appointments: AppointmentRow[];
   dayAvail: AvailabilityDay | null;
   dateStr: string;
   blockedTimes?: BlockedRange[];
+  /** Opens the detail sheet instead of navigating away. */
+  onSelect?: (a: AppointmentRow) => void;
 }) {
   const [photo, setPhoto] = useState<{ src: string | null; name: string } | null>(null);
   const onPhotoClick = (src: string | null, name: string) => setPhoto({ src, name });
@@ -252,11 +254,18 @@ export function DayTimeline({
             const height = Math.max((durMins / 60) * HOUR_H - 3, 34);
             const compact = height < 56;
 
+            const past = new Date(a.ends_at) < new Date();
+
             return (
-              <Link
+              // Opens the detail sheet; the profile stays one tap further in
+              <button
                 key={a.id}
-                href={`/citas/${a.id}`}
-                className="absolute left-0 right-0 rounded-xl px-3 py-1.5 overflow-hidden active:opacity-75 transition-opacity"
+                onClick={() => (onSelect ? onSelect(a) : undefined)}
+                className={cn(
+                  "absolute left-0 right-0 rounded-xl px-2.5 py-1.5 overflow-hidden text-left",
+                  "active:opacity-75 transition-opacity",
+                  past && a.status !== "completada" && "opacity-60 saturate-[0.6]"
+                )}
                 style={{
                   top,
                   height,
@@ -331,7 +340,7 @@ export function DayTimeline({
                     </span>
                   </div>
                 )}
-              </Link>
+              </button>
             );
           })}
         </div>
