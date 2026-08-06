@@ -8,9 +8,8 @@ import {
   getAppointmentStarts,
   getBlockedTimesForDay,
   getClosures,
-  autoCompletePastAppointments,
 } from "@/lib/data/appointments";
-import { getAvailability, getBookingSettings } from "@/lib/data/availability";
+import { getAvailability } from "@/lib/data/availability";
 import { createClient } from "@/lib/supabase/server";
 import { CalendarShell } from "@/components/citas/calendar-shell";
 import type { CalendarView } from "@/components/citas/calendar-toolbar";
@@ -44,7 +43,6 @@ export default async function CitasPage({
     : "day") as CalendarView;
 
   const supabase = await createClient();
-  await autoCompletePastAppointments();
 
   const [rangeStart, rangeEnd] = rangeFor(view, date);
   // The day strip scrolls two months either way, so it needs that whole span

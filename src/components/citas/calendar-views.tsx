@@ -269,7 +269,9 @@ export function WeekView({
                       title={`${fmtTime(s)} · ${name} · ${a.service.name}`}
                       className={cn(
                         "absolute left-0.5 right-0.5 rounded-md px-1 py-0.5 overflow-hidden flex flex-col active:opacity-75",
-                        past && a.status !== "completada" && "opacity-55 saturate-50"
+                        // Dimmed purely because the slot is over — the status
+                        // itself is never changed automatically.
+                        past && "opacity-55"
                       )}
                       style={{
                         top: ((s - dayStart) / 60) * HOUR_H,

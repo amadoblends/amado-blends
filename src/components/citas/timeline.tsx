@@ -23,8 +23,9 @@ function localMins(iso: string) {
 }
 
 function fmtMins(mins: number) {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
+  const total = Math.floor(mins);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
   const p = h >= 12 ? "PM" : "AM";
   const dh = h % 12 === 0 ? 12 : h % 12;
   return `${dh}:${String(m).padStart(2, "0")} ${p}`;
@@ -35,28 +36,56 @@ function localDateStr(iso: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// Red line + circle showing the current time, moving down as the day advances
-function NowIndicator({ dayStart, dayEnd }: { dayStart: number; dayEnd: number }) {
-  const [nowMins, setNowMins] = useState<number | null>(null);
+/**
+ * Minutes since midnight as a *fraction*, refreshed every 15 seconds.
+ *
+ * Using whole minutes made the line jump a whole row-step at a time; a
+ * fractional value makes it crawl through a block so a one-hour appointment
+ * genuinely takes the full hour to be crossed.
+ */
+function useNowMins(active: boolean): number | null {
+  const [mins, setMins] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!active) {
+      setMins(null);
+      return;
+    }
     const tick = () => {
       const n = new Date();
-      setNowMins(n.getHours() * 60 + n.getMinutes());
+      setMins(n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60);
     };
     tick();
-    const id = setInterval(tick, 30_000);
+    const id = setInterval(tick, 15_000);
     return () => clearInterval(id);
-  }, []);
+  }, [active]);
 
+  return mins;
+}
+
+/** Red line + time bubble showing the current moment. */
+function NowIndicator({
+  nowMins,
+  dayStart,
+  dayEnd,
+}: {
+  nowMins: number | null;
+  dayStart: number;
+  dayEnd: number;
+}) {
   if (nowMins === null || nowMins < dayStart || nowMins > dayEnd) return null;
 
   const top = ((nowMins - dayStart) / 60) * HOUR_H;
   return (
-    <div className="absolute left-0 right-0 z-10 pointer-events-none" style={{ top }}>
+    <div
+      className="absolute left-0 right-0 z-20 pointer-events-none"
+      style={{ top, willChange: "transform" }}
+    >
       <div className="relative flex items-center">
-        <div className="absolute -left-[48px] min-w-[44px] h-[20px] px-1.5 rounded-full bg-danger flex items-center justify-center shadow-sm">
-          <span className="text-white text-[9px] font-black leading-none">{fmtMins(nowMins)}</span>
+        <div className="absolute -left-[52px] min-w-[48px] h-[19px] px-1.5 rounded-full bg-danger flex items-center justify-center shadow-sm">
+          <span className="text-white text-[9px] font-black leading-none tnum">
+            {fmtMins(nowMins)}
+          </span>
         </div>
         <div className="w-1.5 h-1.5 rounded-full bg-danger shrink-0" />
         <div className="flex-1 h-[1.5px] bg-danger" />
@@ -75,7 +104,7 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function InitialsCircle({
+function Avatar({
   name,
   avatarUrl,
   color,
@@ -91,18 +120,17 @@ function InitialsCircle({
   const inner = avatarUrl ? (
     <Image src={avatarUrl} alt={name} fill className="object-cover" sizes="48px" />
   ) : (
-    <span className="text-white font-bold" style={{ fontSize: size * 0.4 }}>
+    <span className="font-bold text-white" style={{ fontSize: size * 0.38 }}>
       {initials(name)}
     </span>
   );
 
   const classes = cn(
     "rounded-full overflow-hidden shrink-0 relative flex items-center justify-center",
-    "ring-2 ring-white/70 shadow-sm",
     onExpand && "active:scale-95 transition-transform"
   );
 
-  // Tapping the photo opens it large without following the block's link
+  // Tapping the photo opens it large without opening the appointment sheet
   if (onExpand) {
     return (
       <button
@@ -143,11 +171,11 @@ function DayTimelineBase({
   dayAvail: AvailabilityDay | null;
   dateStr: string;
   blockedTimes?: BlockedRange[];
-  /** Opens the detail sheet instead of navigating away. */
+  /** Opens the detail card instead of navigating away. */
   onSelect?: (a: AppointmentRow) => void;
 }) {
   const [photo, setPhoto] = useState<{ src: string | null; name: string } | null>(null);
-  const onPhotoClick = (src: string | null, name: string) => setPhoto({ src, name });
+
   // Server fetches a widened window (UTC vs local timezone); keep only
   // appointments that fall on the selected local day.
   const appointments = useMemo(
@@ -159,9 +187,12 @@ function DayTimelineBase({
     [blockedTimes, dateStr]
   );
 
+  const isToday = dateStr === localDateStr(new Date().toISOString());
+  const nowMins = useNowMins(isToday);
+
   if (!dayAvail?.is_active) {
     return (
-      <div className="py-12 text-center">
+      <div className="py-16 text-center">
         <p className="text-sm text-muted">Día no laborable. Cámbialo en Disponibilidad.</p>
       </div>
     );
@@ -179,25 +210,26 @@ function DayTimelineBase({
 
   return (
     <div>
-      {appointments.length === 0 && (
-        <p className="text-xs text-muted text-center pb-3">Sin citas — toca + para crear</p>
+      {appointments.length === 0 && blocked.length === 0 && (
+        <p className="text-xs text-muted text-center py-6">Sin citas — toca “Nueva cita” para crear una</p>
       )}
+
       <div className="relative flex">
-        {/* Hour labels — sit slightly above their line so they read as headers */}
-        <div className="w-12 shrink-0 relative" style={{ height: totalH + 12 }}>
+        {/* Hour rail */}
+        <div className="w-[52px] shrink-0 relative" style={{ height: totalH + 14 }}>
           {hours.map((t) => (
             <div
               key={t}
-              className="absolute right-2.5 text-[10px] font-medium text-muted leading-none"
+              className="absolute right-2.5 text-[10px] font-semibold text-muted leading-none tnum"
               style={{ top: ((t - dayStart) / 60) * HOUR_H - 4 }}
             >
-              {fmtMins(t).replace(":00", "")}
+              {fmtMins(t)}
             </div>
           ))}
         </div>
 
         {/* Grid + blocks */}
-        <div className="flex-1 relative min-w-0" style={{ height: totalH + 12 }}>
+        <div className="flex-1 relative min-w-0" style={{ height: totalH + 14 }}>
           {/* Hairline per hour, no vertical rule or outer frame */}
           {hours.map((t) => (
             <div
@@ -210,20 +242,15 @@ function DayTimelineBase({
           {/* Break shading */}
           {breakStart !== null && breakEnd !== null && (
             <div
-              className="absolute left-0 right-0 rounded-xl flex items-center justify-center"
+              className="absolute left-0 right-0 rounded-2xl flex items-center justify-center"
               style={{
                 top: ((breakStart - dayStart) / 60) * HOUR_H,
                 height: ((breakEnd - breakStart) / 60) * HOUR_H,
                 background: "color-mix(in srgb, var(--color-muted) 7%, transparent)",
               }}
             >
-              <span className="text-[9px] font-medium text-muted">Descanso</span>
+              <span className="text-[9px] font-semibold text-muted">Descanso</span>
             </div>
-          )}
-
-          {/* Current time indicator (only on today) */}
-          {dateStr === localDateStr(new Date().toISOString()) && (
-            <NowIndicator dayStart={dayStart} dayEnd={dayEnd} />
           )}
 
           {/* Blocked hours */}
@@ -231,21 +258,19 @@ function DayTimelineBase({
             const sMins = localMins(b.starts_at);
             const durMins =
               (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000;
-            const top = ((sMins - dayStart) / 60) * HOUR_H;
-            const height = Math.max((durMins / 60) * HOUR_H - 2, 20);
             return (
               <div
                 key={b.id}
-                className="absolute left-0 right-0 rounded-xl flex items-center justify-center gap-1"
+                className="absolute left-0 right-0 rounded-2xl flex items-center justify-center gap-1.5"
                 style={{
-                  top,
-                  height,
+                  top: ((sMins - dayStart) / 60) * HOUR_H,
+                  height: Math.max((durMins / 60) * HOUR_H - 3, 22),
                   background:
                     "repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 12px)",
                 }}
               >
                 <Lock size={11} className="text-muted" />
-                <span className="text-[10px] font-semibold text-muted">Bloqueado</span>
+                <span className="text-[10px] font-bold text-muted">Bloqueado</span>
               </div>
             );
           })}
@@ -255,57 +280,78 @@ function DayTimelineBase({
             const sMins = localMins(a.starts_at);
             const durMins =
               (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000;
+            const eMins = sMins + durMins;
             const top = ((sMins - dayStart) / 60) * HOUR_H;
-            // 3px gap keeps back-to-back appointments visually separate
-            const height = Math.max((durMins / 60) * HOUR_H - 3, 34);
-            const compact = height < 56;
+            // 4px gap keeps back-to-back appointments visually separate
+            const height = Math.max((durMins / 60) * HOUR_H - 4, 38);
+            const compact = height < 62;
 
-            const past = new Date(a.ends_at) < new Date();
+            // Purely time-based: nothing here changes the stored status.
+            const running = nowMins !== null && nowMins >= sMins && nowMins < eMins;
+            const finished = nowMins !== null ? nowMins >= eMins : false;
+            // 0 → 1 across the block, so the fill tracks the red line exactly
+            const progress = running ? (nowMins! - sMins) / durMins : 0;
+
+            const name = displayAppointmentName(
+              a.client.full_name,
+              a.guest_name,
+              a.guest_relationship
+            );
 
             return (
-              // Opens the detail sheet; the profile stays one tap further in
               <button
                 key={a.id}
-                onClick={() => (onSelect ? onSelect(a) : undefined)}
+                onClick={() => onSelect?.(a)}
                 className={cn(
-                  "absolute left-0 right-0 rounded-xl px-2.5 py-1.5 overflow-hidden text-left",
-                  "active:opacity-75 transition-opacity",
-                  past && a.status !== "completada" && "opacity-60 saturate-[0.6]"
+                  "absolute left-0 right-0 rounded-2xl overflow-hidden text-left",
+                  "active:scale-[0.985] transition-[opacity,transform] duration-150",
+                  // Only dims once the slot is fully in the past
+                  finished && "opacity-55"
                 )}
                 style={{
                   top,
                   height,
-                  background: `color-mix(in srgb, ${a.service.color} 16%, var(--surface))`,
-                  boxShadow: `inset 3px 0 0 ${a.service.color}`,
+                  background: `color-mix(in srgb, ${a.service.color} 14%, var(--surface))`,
+                  boxShadow: running
+                    ? `inset 0 0 0 1.5px ${a.service.color}`
+                    : `inset 0 0 0 1px color-mix(in srgb, ${a.service.color} 22%, transparent)`,
                 }}
               >
-                <div className="flex items-center gap-2.5 min-w-0 h-full">
-                  <InitialsCircle
+                {/* Elapsed portion of an appointment happening right now */}
+                {running && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-0 left-0 pointer-events-none"
+                    style={{
+                      width: `${Math.min(100, progress * 100)}%`,
+                      background: `color-mix(in srgb, ${a.service.color} 12%, transparent)`,
+                    }}
+                  />
+                )}
+
+                <div className="relative flex items-center gap-2.5 h-full px-2.5 py-1.5">
+                  <Avatar
                     name={a.guest_name ?? a.client.full_name}
                     avatarUrl={a.guest_name ? null : a.client.avatar_url}
                     color={a.service.color}
-                    size={compact ? 28 : 40}
+                    size={compact ? 30 : 38}
                     onExpand={() =>
-                      onPhotoClick?.(
-                        a.guest_name ? null : a.client.avatar_url,
-                        a.guest_name ?? a.client.full_name
-                      )
+                      setPhoto({
+                        src: a.guest_name ? null : a.client.avatar_url,
+                        name: a.guest_name ?? a.client.full_name,
+                      })
                     }
                   />
 
                   <div className="flex-1 min-w-0">
                     <p
-                      className="text-[11px] font-bold leading-tight"
+                      className="text-[11px] font-bold leading-tight tnum"
                       style={{ color: a.service.color }}
                     >
-                      {fmtMins(sMins)} – {fmtMins(sMins + durMins)}
+                      {fmtMins(sMins)}
                     </p>
-                    <p className="text-sm font-bold text-foreground truncate leading-tight">
-                      {displayAppointmentName(
-                        a.client.full_name,
-                        a.guest_name,
-                        a.guest_relationship
-                      )}
+                    <p className="text-[15px] font-bold text-foreground truncate leading-tight">
+                      {name}
                     </p>
                     {!compact && (
                       <p className="text-xs font-medium text-muted truncate leading-tight">
@@ -314,34 +360,46 @@ function DayTimelineBase({
                     )}
                   </div>
 
-                  {/* One small circle per guest attached to this appointment */}
+                  {/* Guests riding along on this appointment */}
                   {a.guests.slice(0, 3).map((g, i) => (
-                    <InitialsCircle key={i} name={g} color={a.service.color} size={20} />
+                    <Avatar key={i} name={g} color={a.service.color} size={20} />
                   ))}
+
+                  {/* Duration pill, mirroring the reference layout */}
+                  <span className="shrink-0 flex items-center gap-1 self-start mt-0.5">
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ background: a.service.color }}
+                    />
+                    <span className="text-[11px] font-bold text-muted tnum">
+                      {Math.round(durMins)}m
+                    </span>
+                  </span>
                 </div>
+
                 {/* Product thumbnails: know what to prepare at a glance */}
-                {a.products.length > 0 && height > 72 && (
-                  <div className="flex items-center gap-1 mt-1">
+                {a.products.length > 0 && height > 78 && (
+                  <div className="absolute bottom-1.5 left-[54px] flex items-center gap-1">
                     {a.products.slice(0, 4).map((p, i) =>
                       p.image_url ? (
-                        <div
+                        <span
                           key={i}
-                          className="w-5 h-5 rounded overflow-hidden border border-border shrink-0 relative"
+                          className="w-5 h-5 rounded-md overflow-hidden border border-border shrink-0 relative"
                           title={`${p.quantity}× ${p.name}`}
                         >
                           <Image src={p.image_url} alt={p.name} fill className="object-cover" />
-                        </div>
+                        </span>
                       ) : (
-                        <div
+                        <span
                           key={i}
-                          className="w-5 h-5 rounded bg-background border border-border flex items-center justify-center shrink-0"
+                          className="w-5 h-5 rounded-md bg-background border border-border flex items-center justify-center shrink-0"
                           title={`${p.quantity}× ${p.name}`}
                         >
                           <ShoppingBag size={10} className="text-muted" />
-                        </div>
+                        </span>
                       )
                     )}
-                    <span className="text-[9px] font-semibold text-muted">
+                    <span className="text-[9px] font-bold text-muted tnum">
                       {a.products.reduce((acc, p) => acc + p.quantity, 0)} prod.
                     </span>
                   </div>
@@ -349,6 +407,9 @@ function DayTimelineBase({
               </button>
             );
           })}
+
+          {/* Drawn last so it rides on top of the blocks it crosses */}
+          <NowIndicator nowMins={nowMins} dayStart={dayStart} dayEnd={dayEnd} />
         </div>
       </div>
 

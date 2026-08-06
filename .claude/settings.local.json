@@ -70,7 +70,9 @@
       "Bash(perl -0pi -e 's/onSelect=\\\\{setSelected\\\\}/onSelect={handleSelect}/' src/components/citas/calendar-shell.tsx)",
       "Bash(sed -i 's|    <div className=\"space-y-4\">\\\\n      <RealtimeRefresher|X|' src/components/citas/calendar-shell.tsx)",
       "Bash(perl -0pi -e 's/    <div className=\"space-y-4\">\\\\n      <RealtimeRefresher/    <div className=\"space-y-3\">\\\\n      <RealtimeRefresher/' src/components/citas/calendar-shell.tsx)",
-      "Bash(git commit -m 'Centre the appointment card, add month dividers, remove the day lag *)"
+      "Bash(git commit -m 'Centre the appointment card, add month dividers, remove the day lag *)",
+      "PowerShell(npx tsc --noEmit)",
+      "PowerShell(npx next build 2>&1)"
     ]
   }
 }

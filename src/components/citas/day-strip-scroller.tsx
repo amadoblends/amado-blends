@@ -1,15 +1,14 @@
 "use client";
 
-import { useRef, useEffect, useMemo, useCallback, useState, useTransition, memo } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useEffect, useMemo, useCallback, memo } from "react";
 import { addDays, subDays, format, isSameDay, startOfDay, isFirstDayOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
 const DAYS_BACK = 60;
 const DAYS_FORWARD = 120;
-const CELL_W = 48;
-const SEP_W = 34;
+const CELL_W = 44;
+const SEP_W = 30;
 const GAP = 4;
 
 type Item =
@@ -17,42 +16,30 @@ type Item =
   | { kind: "month"; label: string; key: string; offset: number };
 
 /**
- * Compact horizontally scrollable day picker with month separators.
- * Swiping reports the month in view so the header can follow along.
+ * Compact horizontally scrollable day picker: weekday label above the number,
+ * a filled pill on the selected day, and a dot when the day has appointments.
+ * Month initials are injected before each 1st so long scrolls stay oriented.
  */
 function DayStripScrollerBase({
   selected,
   counts,
+  onPick,
   onVisibleMonthChange,
 }: {
+  /** Already optimistic — the shell owns the selection so taps feel instant. */
   selected: string;
   counts: Record<string, number>;
+  onPick: (dateKey: string) => void;
   onVisibleMonthChange?: (date: Date) => void;
 }) {
-  const router = useRouter();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const lastReported = useRef<string>("");
-  const [, startTransition] = useTransition();
 
-  // Highlight the tapped day immediately; the server catches up after
-  const [optimistic, setOptimistic] = useState(selected);
-  useEffect(() => setOptimistic(selected), [selected]);
-
-  const selectedDate = useMemo(() => new Date(optimistic + "T00:00:00"), [optimistic]);
+  const selectedDate = useMemo(() => new Date(selected + "T00:00:00"), [selected]);
   const today = useMemo(() => startOfDay(new Date()), []);
 
-  const pick = useCallback(
-    (dateKey: string) => {
-      setOptimistic(dateKey);
-      startTransition(() => {
-        router.push(`/citas?view=day&date=${dateKey}`, { scroll: false });
-      });
-    },
-    [router]
-  );
-
-  // Build once: a month chip is injected before each 1st of the month, and
-  // every item carries its left offset so centring is exact.
+  // Built once: every item carries its left offset so centring is exact even
+  // though month chips are narrower than day cells.
   const { items, offsetByDay } = useMemo(() => {
     const start = subDays(today, DAYS_BACK);
     const list: Item[] = [];
@@ -87,10 +74,10 @@ function DayStripScrollerBase({
       const offset = offsetByDay.get(dateStr);
       if (!el || offset === undefined) return;
       // Left edge that puts the cell's midpoint at the viewport's midpoint
-      el.scrollTo({
-        left: Math.max(0, offset - el.clientWidth / 2 + CELL_W / 2),
-        behavior,
-      });
+      const left = Math.max(0, offset - el.clientWidth / 2 + CELL_W / 2);
+      // Don't fight the user if they've already scrolled it into place
+      if (Math.abs(el.scrollLeft - left) < 2) return;
+      el.scrollTo({ left, behavior });
     },
     [offsetByDay]
   );
@@ -98,9 +85,9 @@ function DayStripScrollerBase({
   // Centre without animation on mount, smoothly when the day changes later
   const mounted = useRef(false);
   useEffect(() => {
-    centreOn(optimistic, mounted.current ? "smooth" : "auto");
+    centreOn(selected, mounted.current ? "smooth" : "auto");
     mounted.current = true;
-  }, [optimistic, centreOn]);
+  }, [selected, centreOn]);
 
   // Report the month under the middle of the viewport, only when it changes
   const handleScroll = useCallback(() => {
@@ -127,10 +114,9 @@ function DayStripScrollerBase({
     <div
       ref={scrollerRef}
       onScroll={handleScroll}
-      className="flex gap-1 overflow-x-auto no-scrollbar -mx-4 px-4 py-0.5 overscroll-x-contain"
+      className="flex gap-1 overflow-x-auto no-scrollbar -mx-4 px-4 overscroll-x-contain"
       style={{
         scrollSnapType: "x proximity",
-        // Momentum scrolling and GPU compositing keep the swipe smooth
         WebkitOverflowScrolling: "touch",
         contain: "content",
       }}
@@ -140,10 +126,10 @@ function DayStripScrollerBase({
           <div
             key={item.key}
             aria-hidden
-            className="shrink-0 flex items-center justify-center"
-            style={{ width: SEP_W, height: 58 }}
+            className="shrink-0 flex items-end justify-center pb-3"
+            style={{ width: SEP_W, height: 62 }}
           >
-            <span className="text-[10px] font-black text-muted/70 tracking-wider">
+            <span className="text-[9px] font-extrabold text-muted/50 tracking-widest">
               {item.label}
             </span>
           </div>
@@ -155,7 +141,7 @@ function DayStripScrollerBase({
             selected={isSameDay(item.date, selectedDate)}
             isToday={isSameDay(item.date, today)}
             hasAppointments={(counts[item.key] ?? 0) > 0}
-            onPick={pick}
+            onPick={onPick}
           />
         )
       )}
@@ -182,35 +168,35 @@ const DayCell = memo(function DayCell({
     <button
       onClick={() => onPick(dateKey)}
       style={{ scrollSnapAlign: "center", width: CELL_W }}
-      className={cn(
-        "shrink-0 h-[58px] rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors",
-        selected
-          ? "bg-foreground"
-          : isToday
-            ? "bg-surface border border-brand"
-            : "bg-surface border border-border"
-      )}
+      className="shrink-0 h-[62px] flex flex-col items-center gap-1 pt-0.5"
     >
       <span
         className={cn(
-          "text-[9px] font-bold uppercase leading-none",
-          selected ? "text-background/60" : isToday ? "text-brand" : "text-muted"
+          "text-[10px] font-bold uppercase leading-none tracking-wide",
+          selected ? "text-foreground" : "text-muted"
         )}
       >
-        {format(date, "EEE", { locale: es }).slice(0, 3)}
+        {format(date, "EEE", { locale: es }).slice(0, 3).replace(".", "")}
       </span>
+
+      {/* Number sits in a filled pill only when it's the selected day */}
       <span
         className={cn(
-          "text-base font-bold leading-none",
-          selected ? "text-background" : isToday ? "text-brand" : "text-foreground"
+          "w-9 h-9 rounded-2xl flex items-center justify-center text-[15px] font-bold leading-none tnum transition-colors",
+          selected
+            ? "bg-foreground text-background"
+            : isToday
+              ? "text-brand"
+              : "text-foreground"
         )}
       >
         {format(date, "d")}
       </span>
+
       <span
         className={cn(
           "w-1 h-1 rounded-full",
-          !hasAppointments ? "bg-transparent" : selected ? "bg-background/60" : "bg-brand"
+          !hasAppointments ? "bg-transparent" : selected ? "bg-brand" : "bg-brand/70"
         )}
       />
     </button>

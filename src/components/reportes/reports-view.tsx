@@ -7,6 +7,7 @@ import {
   BadgePercent, XCircle, Download, Printer, TrendingUp, TrendingDown,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
+import { countsAsAttended } from "@/lib/appointment-status";
 import type { ReportPeriod } from "@/app/(admin)/reportes/page";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ interface Props {
   prevStartISO: string;
   prevEndISO: string;
   appointments: ReportAppointment[];
-  prevAppointments: { starts_at: string; status: string; price: number }[];
+  prevAppointments: { starts_at: string; ends_at: string; status: string; price: number }[];
   newClients: number;
   prevNewClients: number;
   requestedProducts: { quantity: number; name: string; price: number }[];
@@ -93,14 +94,14 @@ export function ReportsView(props: Props) {
   }, [props.prevAppointments, props.prevStartISO, props.prevEndISO]);
 
   // ── Aggregations ───────────────────────────────────────────────────────────
-  const completed = inRange.filter((a) => a.status === "completada");
+  // Statuses are no longer rewritten in the background, so "attended" is
+  // derived: marked completed, or the slot passed without cancel / no-show.
+  const completed = inRange.filter(countsAsAttended);
   const cancelled = inRange.filter((a) => a.status === "cancelada");
   const active = inRange.filter((a) => a.status !== "cancelada");
 
   const revenue = completed.reduce((s, a) => s + a.price, 0);
-  const prevRevenue = prevInRange
-    .filter((a) => a.status === "completada")
-    .reduce((s, a) => s + a.price, 0);
+  const prevRevenue = prevInRange.filter(countsAsAttended).reduce((s, a) => s + a.price, 0);
   const revChange = pctChange(revenue, prevRevenue);
 
   const prevActive = prevInRange.filter((a) => a.status !== "cancelada").length;

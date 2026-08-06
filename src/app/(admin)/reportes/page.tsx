@@ -3,7 +3,6 @@ import {
   startOfYear, endOfYear, format,
 } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
-import { autoCompletePastAppointments } from "@/lib/data/appointments";
 import { BackButton } from "@/components/ui/back-button";
 import { ReportsView } from "@/components/reportes/reports-view";
 
@@ -39,8 +38,6 @@ export default async function ReportesPage({
     ? params.periodo
     : "mes") as ReportPeriod;
 
-  await autoCompletePastAppointments();
-
   const [rangeStart, rangeEnd] = getRange(periodo, params.desde, params.hasta);
   // Previous period of equal length, for comparisons
   const spanMs = rangeEnd.getTime() - rangeStart.getTime();
@@ -68,7 +65,7 @@ export default async function ReportesPage({
       .limit(5000),
     supabase
       .from("appointments")
-      .select("starts_at, status, price")
+      .select("starts_at, ends_at, status, price")
       .gte("starts_at", new Date(prevStart.getTime() - pad).toISOString())
       .lte("starts_at", new Date(prevEnd.getTime() + pad).toISOString())
       .limit(5000),
@@ -125,6 +122,7 @@ export default async function ReportesPage({
         }))}
         prevAppointments={(prevApts ?? []).map((a) => ({
           starts_at: a.starts_at,
+          ends_at: a.ends_at,
           status: a.status,
           price: Number(a.price),
         }))}

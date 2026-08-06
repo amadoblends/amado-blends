@@ -1,34 +1,38 @@
 "use client";
 
-import { memo } from "react";
-import { useRouter } from "next/navigation";
+import { memo, useState, useRef, useEffect } from "react";
 import {
   addDays, addMonths, addYears, subDays, subMonths, subYears, format,
   startOfWeek, endOfWeek,
 } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  ChevronLeft, ChevronRight, Search, Plus, Lock, CalendarOff,
+  ChevronLeft, ChevronRight, ChevronDown, Search, Check,
   Calendar as CalendarIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type CalendarView = "day" | "week" | "month" | "year";
 
-const VIEWS: { key: CalendarView; label: string }[] = [
-  { key: "day", label: "Día" },
-  { key: "week", label: "Semana" },
-  { key: "month", label: "Mes" },
-  { key: "year", label: "Año" },
+const VIEWS: { key: CalendarView; label: string; hint: string }[] = [
+  { key: "day", label: "Día", hint: "Línea de tiempo hora por hora" },
+  { key: "week", label: "Semana", hint: "Los siete días en columnas" },
+  { key: "month", label: "Mes", hint: "Cuadrícula del mes completo" },
+  { key: "year", label: "Año", hint: "Los doce meses de un vistazo" },
 ];
 
+/**
+ * Header of the calendar: search on the left, the period title in the middle
+ * doubling as the view picker, and "go to today" on the right.
+ *
+ * There is deliberately no hamburger here — navigation lives in the bottom bar
+ * on phones and in the sidebar on wider screens.
+ */
 function CalendarToolbarBase({
   view,
   date,
   displayDate,
-  onNewAppointment,
-  onBlockHours,
-  onCloseDays,
+  onNavigate,
   onSearch,
   onToday,
 }: {
@@ -36,18 +40,31 @@ function CalendarToolbarBase({
   date: Date;
   /** Month shown in the title — follows the day strip while scrolling. */
   displayDate?: Date;
-  onNewAppointment: () => void;
-  onBlockHours: () => void;
-  onCloseDays: () => void;
+  /** Single entry point for every date/view change, so transitions stay smooth. */
+  onNavigate: (date: Date, view: CalendarView) => void;
   onSearch: () => void;
-  onToday?: () => void;
+  onToday: () => void;
 }) {
-  const router = useRouter();
   const titleDate = displayDate ?? date;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  function go(nextDate: Date, nextView: CalendarView = view) {
-    router.push(`/citas?view=${nextView}&date=${format(nextDate, "yyyy-MM-dd")}`);
-  }
+  // Close the view menu on an outside tap or Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onDown(e: PointerEvent) {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   function shift(dir: 1 | -1) {
     const move = {
@@ -56,10 +73,10 @@ function CalendarToolbarBase({
       month: dir === 1 ? addMonths : subMonths,
       year: dir === 1 ? addYears : subYears,
     }[view];
-    go(move(date, 1));
+    onNavigate(move(date, 1), view);
   }
 
-  // Day view navigates by swiping the strip, so it needs no arrows
+  // The day view is driven by the strip and by swiping, so it needs no arrows
   const showArrows = view !== "day";
 
   const title =
@@ -72,111 +89,116 @@ function CalendarToolbarBase({
           : format(date, "yyyy");
 
   return (
-    <div className="space-y-2.5">
-      {/* Row 1 — symmetric: today left, title centred, new right */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 shrink-0">
-          <TodayButton onClick={() => (onToday ? onToday() : go(new Date()))} />
-          {showArrows && (
-            <button
-              onClick={() => shift(-1)}
-              aria-label="Anterior"
-              className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background"
-            >
-              <ChevronLeft size={16} />
-            </button>
-          )}
-        </div>
-
-        {/* Fixed centre: min-w-0 stops long titles pushing the buttons out */}
-        <h1 className="flex-1 min-w-0 text-center text-base sm:text-lg font-bold text-foreground capitalize truncate px-1">
-          {title}
-        </h1>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          {showArrows && (
-            <button
-              onClick={() => shift(1)}
-              aria-label="Siguiente"
-              className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background"
-            >
-              <ChevronRight size={16} />
-            </button>
-          )}
-          <button
-            onClick={onNewAppointment}
-            aria-label="Nueva cita"
-            className="h-9 px-3 rounded-xl bg-brand text-white text-xs font-bold flex items-center gap-1 whitespace-nowrap active:scale-95 transition-transform"
-          >
-            <Plus size={15} strokeWidth={2.6} />
-            <span className="hidden xs:inline sm:inline">Nueva</span>
-          </button>
-        </div>
+    <div className="relative flex items-center gap-1.5">
+      {/* Left cluster — fixed width so the title stays optically centred */}
+      <div className="flex items-center gap-1 shrink-0">
+        <IconButton onClick={onSearch} label="Buscar cita o cliente">
+          <Search size={18} strokeWidth={2} />
+        </IconButton>
+        {showArrows && (
+          <IconButton onClick={() => shift(-1)} label="Anterior">
+            <ChevronLeft size={18} strokeWidth={2.2} />
+          </IconButton>
+        )}
       </div>
 
-      {/* Row 2 — views on the left, tools on the right, all inside the width */}
-      <div className="flex items-center gap-2">
-        <div className="flex rounded-xl bg-surface border border-border p-0.5 flex-1 min-w-0">
-          {VIEWS.map((v) => (
-            <button
-              key={v.key}
-              onClick={() => go(date, v.key)}
-              className={cn(
-                "flex-1 h-8 rounded-lg text-[11px] font-semibold transition-colors truncate px-1",
-                view === v.key ? "bg-foreground text-background" : "text-muted"
-              )}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
+      {/* Centre — the title is the view picker */}
+      <div ref={menuRef} className="flex-1 min-w-0 flex justify-center">
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          className="max-w-full flex items-center gap-1 px-2 py-1 rounded-xl active:bg-surface"
+        >
+          <span className="text-[17px] font-bold text-foreground capitalize truncate tnum">
+            {title}
+          </span>
+          <ChevronDown
+            size={16}
+            strokeWidth={2.4}
+            className={cn(
+              "text-muted shrink-0 transition-transform duration-200",
+              menuOpen && "rotate-180"
+            )}
+          />
+        </button>
 
-        <div className="flex items-center gap-1 shrink-0">
-          <ToolButton onClick={onSearch} icon={<Search size={15} />} label="Buscar" />
-          <ToolButton onClick={onBlockHours} icon={<Lock size={15} />} label="Bloquear horas" />
-          <ToolButton onClick={onCloseDays} icon={<CalendarOff size={15} />} label="Cerrar días" />
-        </div>
+        {menuOpen && (
+          <div
+            role="menu"
+            className="absolute top-full mt-1.5 z-40 w-[236px] left-1/2 -translate-x-1/2 bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden animate-view-in"
+          >
+            {VIEWS.map((v) => (
+              <button
+                key={v.key}
+                role="menuitemradio"
+                aria-checked={view === v.key}
+                onClick={() => {
+                  setMenuOpen(false);
+                  if (v.key !== view) onNavigate(date, v.key);
+                }}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3.5 py-2.5 text-left active:bg-background",
+                  view === v.key && "bg-background"
+                )}
+              >
+                <span className="w-4 shrink-0">
+                  {view === v.key && <Check size={15} className="text-brand" strokeWidth={3} />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold text-foreground leading-tight">
+                    {v.label}
+                  </span>
+                  <span className="block text-[11px] text-muted leading-tight truncate">
+                    {v.hint}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Right cluster — mirrors the left one's width */}
+      <div className="flex items-center gap-1 shrink-0">
+        {showArrows && (
+          <IconButton onClick={() => shift(1)} label="Siguiente">
+            <ChevronRight size={18} strokeWidth={2.2} />
+          </IconButton>
+        )}
+        <IconButton onClick={onToday} label="Ir a hoy">
+          <span className="relative flex items-center justify-center">
+            <CalendarIcon size={20} strokeWidth={1.7} />
+            <span className="absolute inset-x-0 bottom-[3px] text-[8px] font-black leading-none tnum">
+              {format(new Date(), "d")}
+            </span>
+          </span>
+        </IconButton>
       </div>
     </div>
   );
 }
 
-function TodayButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label="Ir a hoy"
-      title="Ir a hoy"
-      className="relative w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background shrink-0"
-    >
-      <CalendarIcon size={19} className="text-muted" strokeWidth={1.6} />
-      <span className="absolute inset-x-0 bottom-[7px] text-[9px] font-black text-foreground leading-none">
-        {format(new Date(), "d")}
-      </span>
-    </button>
-  );
-}
-
-function ToolButton({
+function IconButton({
   onClick,
-  icon,
   label,
+  children,
 }: {
   onClick: () => void;
-  icon: React.ReactNode;
   label: string;
+  children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="w-9 h-9 rounded-xl border border-border bg-surface text-foreground flex items-center justify-center shrink-0 active:bg-background"
+      className="w-10 h-10 rounded-xl flex items-center justify-center text-foreground shrink-0 active:bg-surface transition-colors"
     >
-      {icon}
+      {children}
     </button>
   );
 }
 
-// The toolbar only changes with the view or the visible month
+// The toolbar only changes with the view, the date or the visible month
 export const CalendarToolbar = memo(CalendarToolbarBase);

@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Home, Calendar, Users, History, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,27 @@ const items = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  /*
+   * These five destinations are one tap apart at all times, so their route
+   * bundles are fetched once the current page is idle. Without this every
+   * switch paid for a cold chunk download before anything rendered.
+   */
+  useEffect(() => {
+    const warm = () => {
+      for (const item of items) {
+        if (item.href !== pathname) router.prefetch(item.href);
+      }
+    };
+    const idle = window.requestIdleCallback;
+    if (typeof idle === "function") {
+      const id = idle(warm, { timeout: 2500 });
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const id = setTimeout(warm, 800);
+    return () => clearTimeout(id);
+  }, [pathname, router]);
 
   return (
     <nav className="md:hidden sticky bottom-0 left-0 right-0 bg-surface/95 backdrop-blur border-t border-border pb-[max(8px,var(--safe-bottom))] pt-2 px-2 z-30">
@@ -27,8 +49,9 @@ export function BottomNav() {
             <li key={item.href} className="flex-1">
               <Link
                 href={item.href}
+                prefetch
                 className={cn(
-                  "flex flex-col items-center gap-1 py-1.5 text-xs font-medium transition-colors",
+                  "flex flex-col items-center gap-1 py-1.5 text-[11px] font-semibold transition-colors",
                   active ? "text-brand" : "text-muted"
                 )}
               >

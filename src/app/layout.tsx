@@ -1,17 +1,29 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans, Playfair_Display, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PwaRegister } from "@/components/pwa-register";
 import { ThemeScript } from "@/components/theme/theme-provider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// UI type: geometric, tight, excellent lining numerals for the calendar
+const sans = Plus_Jakarta_Sans({
+  variable: "--font-sans-app",
   subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700", "800"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// Display type: reserved for the brand and large page titles
+const display = Playfair_Display({
+  variable: "--font-display-app",
   subsets: ["latin"],
+  display: "swap",
+  weight: ["500", "600", "700"],
+});
+
+const mono = Geist_Mono({
+  variable: "--font-mono-app",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -47,7 +59,7 @@ export default function RootLayout({
       lang="es"
       // data-theme is set by ThemeScript before paint to avoid a flash
       data-theme="dark"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${sans.variable} ${display.variable} ${mono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

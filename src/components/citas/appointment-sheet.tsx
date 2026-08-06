@@ -7,12 +7,12 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  X, Phone, MessageSquare, Check, UserX, CalendarClock, Ban, ChevronRight,
-  Clock, Scissors, DollarSign, ShoppingBag, StickyNote, Loader2, UserPlus,
+  X, Phone, Check, UserX, CalendarClock, Ban, ChevronRight,
+  Clock, Timer, Scissors, DollarSign, ShoppingBag, StickyNote, Loader2,
+  UserPlus, CalendarDays, Wallet, User,
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { cn, formatCurrency } from "@/lib/utils";
-import { StatusBadge } from "@/components/ui/badge";
 import { relationshipLabel } from "@/lib/guests";
 import { updateAppointmentStatus } from "@/lib/actions/appointments";
 import { createClient } from "@/lib/supabase/client";
@@ -21,15 +21,31 @@ import type { AppointmentRow } from "@/lib/data/appointments";
 interface Extra {
   serviceProducts: { name: string; category: string | null }[];
   buyProducts: { name: string; quantity: number }[];
-  guests: { full_name: string; relationship: string | null }[];
+  guests: { full_name: string }[];
   phone: string;
   email: string | null;
   notes: string | null;
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  confirmada: "Cita confirmada",
+  pendiente: "Cita pendiente",
+  completada: "Cita completada",
+  cancelada: "Cita cancelada",
+  no_show: "No asistió",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  confirmada: "var(--color-brand)",
+  pendiente: "var(--color-warning)",
+  completada: "var(--color-success)",
+  cancelada: "var(--color-danger)",
+  no_show: "var(--color-danger)",
+};
+
 /**
- * Bottom sheet with everything about an appointment, so the barber rarely
- * needs to leave the calendar.
+ * Floating detail card: photo and status up top, the facts in a single quiet
+ * list, and the four actions the barber actually needs along the bottom.
  */
 export function AppointmentSheet({
   appointment,
@@ -45,7 +61,7 @@ export function AppointmentSheet({
   const [loadingExtra, setLoadingExtra] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  // Lock the page behind the sheet
+  // Lock the page behind the card
   useEffect(() => {
     if (!appointment) return;
     document.body.style.overflow = "hidden";
@@ -85,7 +101,7 @@ export function AppointmentSheet({
         .eq("appointment_id", appointment.id),
       supabase
         .from("appointment_guests")
-        .select("full_name, service_id")
+        .select("full_name")
         .eq("appointment_id", appointment.id),
     ]).then(([apt, svcProds, buyProds, guests]) => {
       if (!alive) return;
@@ -106,10 +122,7 @@ export function AppointmentSheet({
           quantity: r.quantity,
           name: (r.products as unknown as { name: string })?.name ?? "",
         })),
-        guests: (guests.data ?? []).map((g) => ({
-          full_name: g.full_name,
-          relationship: null,
-        })),
+        guests: (guests.data ?? []).map((g) => ({ full_name: g.full_name })),
       });
       setLoadingExtra(false);
     });
@@ -129,6 +142,9 @@ export function AppointmentSheet({
   const displayName = a.guest_name ?? a.client.full_name;
   const photo = isGuest ? null : a.client.avatar_url;
   const isWalkIn = extra?.phone === "walk-in";
+  const canCall = Boolean(extra?.phone) && !isWalkIn;
+
+  const accent = STATUS_COLOR[a.status] ?? "var(--color-brand)";
 
   const initials = displayName
     .split(" ")
@@ -147,7 +163,6 @@ export function AppointmentSheet({
   }
 
   return createPortal(
-    // Floating card, centred on every screen with safe margins around it
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       style={{
@@ -155,70 +170,103 @@ export function AppointmentSheet({
         paddingBottom: "max(1rem, var(--safe-bottom))",
       }}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
 
       <div
         className={cn(
-          "relative w-full max-w-[400px] bg-surface rounded-3xl shadow-2xl",
-          "max-h-full flex flex-col overflow-hidden animate-sheet-in"
+          "relative w-full max-w-[400px] bg-surface rounded-[28px]",
+          "max-h-full flex flex-col overflow-hidden animate-sheet-in",
+          "shadow-[0_24px_70px_-12px_rgba(0,0,0,0.65)] ring-1 ring-border"
         )}
       >
-        <div className="shrink-0 flex items-center justify-end px-3 pt-3">
-          <button
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="w-8 h-8 rounded-full bg-background flex items-center justify-center"
-          >
-            <X size={15} />
-          </button>
-        </div>
+        {/* A whisper of the status colour along the top edge */}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-24 pointer-events-none"
+          style={{ background: `linear-gradient(to bottom, ${accent}1a, transparent)` }}
+        />
 
-        <div className="overflow-y-auto px-4 pb-5 space-y-4">
-          {/* Client */}
-          <div className="flex items-center gap-3.5 pt-1">
+        <button
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-background/80 border border-border backdrop-blur flex items-center justify-center active:scale-95 transition-transform"
+        >
+          <X size={16} strokeWidth={2.4} />
+        </button>
+
+        <div className="overflow-y-auto px-5 pt-6 pb-5 space-y-4">
+          {/* ── Identity ─────────────────────────────────────────────── */}
+          <div className="relative flex items-center gap-4 pr-10">
             <div
-              className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 relative flex items-center justify-center"
-              style={{ background: photo ? undefined : `${a.service.color}26` }}
+              className="w-[74px] h-[74px] rounded-full shrink-0 relative flex items-center justify-center overflow-hidden"
+              style={{ boxShadow: `0 0 0 2.5px ${accent}, 0 0 0 5px var(--surface)` }}
             >
               {photo ? (
-                <Image src={photo} alt="" fill sizes="64px" className="object-cover" />
+                <Image src={photo} alt="" fill sizes="74px" className="object-cover" />
               ) : (
-                <span className="text-xl font-black" style={{ color: a.service.color }}>
+                <span
+                  className="w-full h-full flex items-center justify-center text-2xl font-black"
+                  style={{ background: `color-mix(in srgb, ${accent} 18%, var(--background))`, color: accent }}
+                >
                   {initials}
                 </span>
               )}
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-lg font-bold text-foreground truncate leading-tight">
-                {displayName}
+              <p
+                className="text-[11px] font-bold flex items-center gap-1.5 mb-0.5"
+                style={{ color: accent }}
+              >
+                <span
+                  className="w-[7px] h-[7px] rounded-full shrink-0"
+                  style={{ background: accent }}
+                />
+                {STATUS_LABEL[a.status] ?? a.status}
               </p>
-              {isGuest && (
-                <p className="text-xs text-brand font-semibold flex items-center gap-1">
-                  <UserPlus size={10} />
-                  {relationshipLabel(a.guest_relationship)} de {a.client.full_name}
-                </p>
-              )}
-              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                <StatusBadge status={a.status} />
-                <span className="text-[10px] font-semibold text-muted bg-background border border-border px-1.5 py-0.5 rounded-full">
+
+              <h2 className="text-[22px] font-extrabold text-foreground leading-tight truncate">
+                {displayName}
+              </h2>
+
+              <p className="text-sm text-muted truncate leading-tight">{a.service.name}</p>
+
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-background border border-border text-[11px] font-bold text-foreground">
+                  <Timer size={12} className="text-muted" />
+                  <span className="tnum">{durationMins} minutos</span>
+                </span>
+                <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-background border border-border text-[11px] font-bold text-muted">
+                  <User size={11} />
                   {isGuest ? "Invitado" : isWalkIn ? "Walk-in" : "Reservada"}
                 </span>
               </div>
+
+              {isGuest && (
+                <p className="text-[11px] text-muted mt-1.5 flex items-center gap-1">
+                  <UserPlus size={11} />
+                  {relationshipLabel(a.guest_relationship)} de {a.client.full_name}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* When and what */}
+          {/* ── The facts ────────────────────────────────────────────── */}
           <div className="bg-background rounded-2xl border border-border divide-y divide-border">
-            <Row icon={<Clock size={15} />} label="Horario">
-              {format(start, "h:mm a")} – {format(end, "h:mm a")} · {durationMins} min
-            </Row>
-            <Row icon={<CalendarClock size={15} />} label="Fecha">
+            <Row icon={<CalendarDays size={16} />} label="Fecha">
               <span className="capitalize">
-                {format(start, "EEEE d 'de' MMMM", { locale: es })}
+                {format(start, "EEEE, d 'de' MMMM yyyy", { locale: es })}
               </span>
             </Row>
-            <Row icon={<Scissors size={15} />} label="Servicio">
+            <Row icon={<Clock size={16} />} label="Hora">
+              <span className="tnum">
+                {format(start, "h:mm a")} – {format(end, "h:mm a")}
+              </span>
+            </Row>
+            <Row icon={<Timer size={16} />} label="Duración">
+              <span className="tnum">{durationMins} minutos</span>
+            </Row>
+            <Row icon={<Scissors size={16} />} label="Servicio">
               <span className="inline-flex items-center gap-1.5">
                 <span
                   className="w-2 h-2 rounded-full inline-block shrink-0"
@@ -227,123 +275,105 @@ export function AppointmentSheet({
                 {a.service.name}
               </span>
             </Row>
-            <Row icon={<DollarSign size={15} />} label="Precio">
-              {formatCurrency(a.price)} · en el local
+
+            {extra && extra.serviceProducts.length > 0 && (
+              <Row icon={<Scissors size={16} />} label="Productos">
+                {extra.serviceProducts.map((p) => p.name).join(", ")}
+              </Row>
+            )}
+
+            {extra && extra.buyProducts.length > 0 && (
+              <Row icon={<ShoppingBag size={16} />} label="Se lleva">
+                {extra.buyProducts.map((p) => `${p.quantity}× ${p.name}`).join(", ")}
+              </Row>
+            )}
+
+            {extra && extra.guests.length > 0 && (
+              <Row icon={<UserPlus size={16} />} label="Invitados">
+                {extra.guests.map((g) => g.full_name).join(", ")}
+              </Row>
+            )}
+
+            <Row icon={<DollarSign size={16} />} label="Precio">
+              <span className="tnum">{formatCurrency(a.price)}</span>
             </Row>
+            <Row icon={<Wallet size={16} />} label="Pago">
+              En el local
+            </Row>
+
+            {extra?.notes && (
+              <Row icon={<StickyNote size={16} />} label="Notas" wrap>
+                {extra.notes}
+              </Row>
+            )}
+
+            {canCall && (
+              <Row icon={<Phone size={16} />} label="Teléfono">
+                <a href={`tel:${extra!.phone}`} className="tnum">
+                  {extra!.phone}
+                </a>
+              </Row>
+            )}
           </div>
 
           {loadingExtra && (
-            <div className="flex items-center justify-center py-2">
-              <Loader2 size={16} className="animate-spin text-muted" />
+            <div className="flex items-center justify-center py-1">
+              <Loader2 size={15} className="animate-spin text-muted" />
             </div>
           )}
 
-          {/* Products requested for the service */}
-          {extra && extra.serviceProducts.length > 0 && (
-            <Section title="Productos a usar" icon={<Scissors size={13} />}>
-              <div className="flex flex-wrap gap-1.5">
-                {extra.serviceProducts.map((p, i) => (
-                  <span
-                    key={i}
-                    className="px-2.5 h-7 rounded-full bg-brand-light border border-brand/20 text-[11px] font-semibold text-brand flex items-center"
-                  >
-                    {p.name}
-                  </span>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Products to hand over */}
-          {extra && extra.buyProducts.length > 0 && (
-            <Section title="Productos que se lleva" icon={<ShoppingBag size={13} />}>
-              <div className="space-y-1">
-                {extra.buyProducts.map((p, i) => (
-                  <p key={i} className="text-sm text-foreground">
-                    {p.quantity}× {p.name}
-                  </p>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Guests attached to this appointment */}
-          {extra && extra.guests.length > 0 && (
-            <Section title="Invitados" icon={<UserPlus size={13} />}>
-              <div className="space-y-1">
-                {extra.guests.map((g, i) => (
-                  <p key={i} className="text-sm text-foreground">
-                    {g.full_name}
-                  </p>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {extra?.notes && (
-            <Section title="Notas" icon={<StickyNote size={13} />}>
-              <p className="text-sm text-foreground">{extra.notes}</p>
-            </Section>
-          )}
-
-          {/* Contact */}
-          {extra && extra.phone && extra.phone !== "walk-in" && (
-            <div className="flex gap-2">
-              <a
-                href={`tel:${extra.phone}`}
-                className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl border border-border bg-background text-sm font-semibold text-foreground"
-              >
-                <Phone size={15} /> Llamar
-              </a>
-              <a
-                href={`sms:${extra.phone}`}
-                className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl border border-border bg-background text-sm font-semibold text-foreground"
-              >
-                <MessageSquare size={15} /> Mensaje
-              </a>
-            </div>
-          )}
-
-          {/* Status actions */}
-          <div className="grid grid-cols-2 gap-2">
-            <ActionButton
-              onClick={() => setStatus("completada")}
-              disabled={isPending || a.status === "completada"}
-              icon={<Check size={15} />}
-              label="Completada"
-              tone="success"
-            />
-            <ActionButton
-              onClick={() => setStatus("no_show")}
-              disabled={isPending || a.status === "no_show"}
-              icon={<UserX size={15} />}
-              label="No asistió"
-              tone="warning"
-            />
-            <ActionButton
+          {/* ── Actions ──────────────────────────────────────────────── */}
+          <div className="grid grid-cols-4 gap-2">
+            <ActionTile
               onClick={() => {
                 onClose();
                 onReschedule?.(a);
               }}
               disabled={isPending}
-              icon={<CalendarClock size={15} />}
-              label="Reagendar"
+              icon={<CalendarClock size={19} />}
+              label="Reprogramar"
             />
-            <ActionButton
+            <ActionTile
+              onClick={() => setStatus("no_show")}
+              disabled={isPending || a.status === "no_show"}
+              icon={<UserX size={19} />}
+              label="No-show"
+              tone="danger"
+            />
+            {canCall ? (
+              <ActionTile
+                href={`tel:${extra!.phone}`}
+                icon={<Phone size={19} />}
+                label="Llamar"
+              />
+            ) : (
+              <ActionTile disabled icon={<Phone size={19} />} label="Llamar" />
+            )}
+            <ActionTile
               onClick={() => {
                 if (confirm("¿Cancelar esta cita?")) setStatus("cancelada");
               }}
               disabled={isPending || a.status === "cancelada"}
-              icon={<Ban size={15} />}
+              icon={<Ban size={19} />}
               label="Cancelar"
               tone="danger"
             />
           </div>
 
+          {/* Completing is the happy path, so it gets its own wide button */}
+          <button
+            onClick={() => setStatus("completada")}
+            disabled={isPending || a.status === "completada"}
+            className="w-full h-12 rounded-2xl bg-success-light border border-success/30 text-success text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-transform"
+          >
+            {isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={17} strokeWidth={2.8} />}
+            Marcar como completada
+          </button>
+
           {/* Full profile is one deliberate tap away */}
           <Link
             href={`/clientes/${a.client.id}`}
-            className="flex items-center justify-center gap-1.5 text-sm font-semibold text-muted py-1"
+            className="flex items-center justify-center gap-1 text-[13px] font-semibold text-muted py-0.5"
           >
             Ver perfil del cliente <ChevronRight size={14} />
           </Link>
@@ -358,72 +388,69 @@ function Row({
   icon,
   label,
   children,
+  wrap,
 }: {
   icon: React.ReactNode;
   label: string;
   children: React.ReactNode;
+  wrap?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 px-3.5 py-2.5">
-      <span className="text-muted shrink-0">{icon}</span>
-      <span className="text-xs text-muted w-16 shrink-0">{label}</span>
-      <span className="text-sm font-semibold text-foreground text-right flex-1 min-w-0 truncate">
+    <div className="flex items-start gap-3 px-3.5 py-3">
+      <span className="text-muted shrink-0 mt-px">{icon}</span>
+      <span className="text-[13px] text-muted w-[74px] shrink-0">{label}</span>
+      <span
+        className={cn(
+          "text-[13px] font-semibold text-foreground text-right flex-1 min-w-0",
+          wrap ? "break-words" : "truncate"
+        )}
+      >
         {children}
       </span>
     </div>
   );
 }
 
-function Section({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-background rounded-2xl border border-border p-3.5 space-y-2">
-      <p className="text-[11px] font-bold text-muted uppercase tracking-wide flex items-center gap-1.5">
-        {icon}
-        {title}
-      </p>
-      {children}
-    </div>
-  );
-}
-
-function ActionButton({
+function ActionTile({
   onClick,
+  href,
   disabled,
   icon,
   label,
   tone,
 }: {
-  onClick: () => void;
+  onClick?: () => void;
+  href?: string;
   disabled?: boolean;
   icon: React.ReactNode;
   label: string;
-  tone?: "success" | "danger" | "warning";
+  tone?: "danger";
 }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "h-12 rounded-xl border text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40",
-        tone === "success"
-          ? "border-success/30 bg-success-light text-success"
-          : tone === "danger"
-            ? "border-danger/30 bg-danger-light text-danger"
-            : tone === "warning"
-              ? "border-warning/30 bg-warning-light text-warning"
-              : "border-border bg-background text-foreground"
-      )}
-    >
+  const classes = cn(
+    "h-[72px] rounded-2xl bg-background border border-border flex flex-col items-center justify-center gap-1.5",
+    "active:scale-95 transition-transform",
+    tone === "danger" ? "text-danger" : "text-foreground",
+    disabled && "opacity-35 pointer-events-none"
+  );
+
+  const content = (
+    <>
       {icon}
-      {label}
+      <span className="text-[10px] font-bold leading-none text-center px-0.5">{label}</span>
+    </>
+  );
+
+  if (href && !disabled) {
+    return (
+      <a href={href} className={classes}>
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <button onClick={onClick} disabled={disabled} className={classes}>
+      {content}
     </button>
   );
 }

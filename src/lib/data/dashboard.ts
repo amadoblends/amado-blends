@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { countsAsAttended } from "@/lib/appointment-status";
 import { startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -98,7 +99,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const today = todayApts.data ?? [];
   const nonCancelledToday = today.filter((a) => a.status !== "cancelada");
-  const completedToday = today.filter((a) => a.status === "completada");
+  // Derived rather than written back to the database — see countsAsAttended
+  const completedToday = today.filter(countsAsAttended);
 
   const todayRevenue = nonCancelledToday.reduce((sum, a) => sum + Number(a.price), 0);
   const todayCompletedRevenue = completedToday.reduce((sum, a) => sum + Number(a.price), 0);
@@ -111,9 +113,9 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const distribution = { confirmada: 0, pendiente: 0, completada: 0, total: 0 };
   for (const a of today) {
-    if (a.status === "confirmada") distribution.confirmada++;
+    if (countsAsAttended(a)) distribution.completada++;
+    else if (a.status === "confirmada") distribution.confirmada++;
     else if (a.status === "pendiente") distribution.pendiente++;
-    else if (a.status === "completada") distribution.completada++;
   }
   distribution.total = distribution.confirmada + distribution.pendiente + distribution.completada;
 

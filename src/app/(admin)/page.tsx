@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { getDashboardData } from "@/lib/data/dashboard";
-import { autoCompletePastAppointments } from "@/lib/data/appointments";
 import { getDashboardLayout } from "@/lib/actions/dashboard";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 
@@ -9,9 +8,6 @@ export default async function DashboardPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  // Past appointments become "completada" so stats reflect reality
-  await autoCompletePastAppointments();
 
   const [{ data: profile }, data, { count: unreadCount }, layout] = await Promise.all([
     user

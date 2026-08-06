@@ -22,16 +22,8 @@ export interface AppointmentRow {
   guest_relationship: string | null;
 }
 
-// Appointments whose end time already passed get marked as completed
-// automatically, so day stats always reflect reality.
-export async function autoCompletePastAppointments(): Promise<void> {
-  const supabase = await createClient();
-  await supabase
-    .from("appointments")
-    .update({ status: "completada" })
-    .in("status", ["pendiente", "confirmada"])
-    .lt("ends_at", new Date().toISOString());
-}
+// Status rules live in a server-free module so client views can share them
+export { countsAsAttended } from "@/lib/appointment-status";
 
 export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[]> {
   const supabase = await createClient();

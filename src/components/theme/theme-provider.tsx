@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import { saveTheme } from "@/lib/actions/theme";
 
 export type Theme = "dark" | "light";
@@ -57,10 +57,22 @@ export function ThemeProvider({
     return () => mq.removeEventListener("change", onChange);
   }, [followSystem]);
 
-  // Reflect on <html> so every CSS variable swaps at once
+  // Reflect on <html> so every CSS variable swaps at once. The transition
+  // class is added only for the swap itself — leaving it on would make every
+  // tap elsewhere in the app animate its colours.
+  const first = useRef(true);
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    document.documentElement.style.colorScheme = theme;
+    const root = document.documentElement;
+    root.setAttribute("data-theme", theme);
+    root.style.colorScheme = theme;
+
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    root.classList.add("theme-switching");
+    const id = setTimeout(() => root.classList.remove("theme-switching"), 260);
+    return () => clearTimeout(id);
   }, [theme]);
 
   const setTheme = useCallback((next: Theme) => {
