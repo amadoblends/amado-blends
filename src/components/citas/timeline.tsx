@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import Image from "next/image";
 import { ShoppingBag, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -132,7 +132,7 @@ function InitialsCircle({
   );
 }
 
-export function DayTimeline({
+function DayTimelineBase({
   appointments: allAppointments,
   dayAvail,
   dateStr,
@@ -150,8 +150,14 @@ export function DayTimeline({
   const onPhotoClick = (src: string | null, name: string) => setPhoto({ src, name });
   // Server fetches a widened window (UTC vs local timezone); keep only
   // appointments that fall on the selected local day.
-  const appointments = allAppointments.filter((a) => localDateStr(a.starts_at) === dateStr);
-  const blocked = blockedTimes.filter((b) => localDateStr(b.starts_at) === dateStr);
+  const appointments = useMemo(
+    () => allAppointments.filter((a) => localDateStr(a.starts_at) === dateStr),
+    [allAppointments, dateStr]
+  );
+  const blocked = useMemo(
+    () => blockedTimes.filter((b) => localDateStr(b.starts_at) === dateStr),
+    [blockedTimes, dateStr]
+  );
 
   if (!dayAvail?.is_active) {
     return (
@@ -355,3 +361,6 @@ export function DayTimeline({
     </div>
   );
 }
+
+// Re-renders only when the day, its data or the selection handler change
+export const DayTimeline = memo(DayTimelineBase);

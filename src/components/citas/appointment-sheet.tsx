@@ -147,28 +147,33 @@ export function AppointmentSheet({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4">
-      <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={onClose} />
+    // Floating card, centred on every screen with safe margins around it
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style={{
+        paddingTop: "max(1rem, var(--safe-top))",
+        paddingBottom: "max(1rem, var(--safe-bottom))",
+      }}
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       <div
         className={cn(
-          "relative w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl",
-          "max-h-[90dvh] flex flex-col overflow-hidden"
+          "relative w-full max-w-[400px] bg-surface rounded-3xl shadow-2xl",
+          "max-h-full flex flex-col overflow-hidden animate-sheet-in"
         )}
       >
-        {/* Grab handle + close */}
-        <div className="shrink-0 pt-2.5 px-4 pb-1 flex items-center justify-center relative">
-          <span className="w-9 h-1 rounded-full bg-border sm:hidden" />
+        <div className="shrink-0 flex items-center justify-end px-3 pt-3">
           <button
             onClick={onClose}
             aria-label="Cerrar"
-            className="absolute right-3 top-2 w-8 h-8 rounded-full bg-background flex items-center justify-center"
+            className="w-8 h-8 rounded-full bg-background flex items-center justify-center"
           >
             <X size={15} />
           </button>
         </div>
 
-        <div className="overflow-y-auto px-4 pb-[max(16px,var(--safe-bottom))] space-y-4">
+        <div className="overflow-y-auto px-4 pb-5 space-y-4">
           {/* Client */}
           <div className="flex items-center gap-3.5 pt-1">
             <div

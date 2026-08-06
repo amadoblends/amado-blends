@@ -63,7 +63,14 @@
       "Bash(perl -pi -e 's/export type AppointmentStatus = \"confirmada\" \\\\| \"pendiente\" \\\\| \"completada\" \\\\| \"cancelada\";/export type AppointmentStatus =\\\\n  | \"confirmada\"\\\\n  | \"pendiente\"\\\\n  | \"completada\"\\\\n  | \"cancelada\"\\\\n  | \"no_show\";/' src/lib/supabase/types.ts)",
       "Bash(sed -i '/import { DateStrip } from \"@\\\\/components\\\\/citas\\\\/date-strip\";/d' \"src/app/\\(admin\\)/citas/page.tsx\")",
       "Bash(sed -i 's|  startOfYear, endOfYear, startOfDay, endOfDay, addDays,|  startOfYear, endOfYear, startOfDay, endOfDay, addDays,|' \"src/app/\\(admin\\)/citas/page.tsx\")",
-      "Bash(git commit -m 'Mobile calendar: swipeable day strip, compact blocks, detail sheet *)"
+      "Bash(git commit -m 'Mobile calendar: swipeable day strip, compact blocks, detail sheet *)",
+      "Bash(sed -i -e 's| const appointments = allAppointments.filter\\(\\(a\\) => localDateStr\\(a.starts_at\\) === dateStr\\);| const appointments = useMemo\\(\\\\n \\(\\) => allAppointments.filter\\(\\(a\\) => localDateStr\\(a.starts_at\\) === dateStr\\),\\\\n [allAppointments, dateStr]\\\\n \\);|' -e 's| const blocked = blockedTimes.filter\\(\\(b\\) => localDateStr\\(b.starts_at\\) === dateStr\\);| const blocked = useMemo\\(\\\\n \\(\\) => blockedTimes.filter\\(\\(b\\) => localDateStr\\(b.starts_at\\) === dateStr\\),\\\\n [blockedTimes, dateStr]\\\\n \\);|' src/components/citas/timeline.tsx)",
+      "Bash(perl -0pi -e 's/onNewAppointment=\\\\{\\\\\\(\\\\\\) => openWizardAt\\\\\\(null\\\\\\)\\\\}\\\\n        onBlockHours=\\\\{\\\\\\(\\\\\\) => setBlockOpen\\\\\\(true\\\\\\)\\\\}\\\\n        onCloseDays=\\\\{\\\\\\(\\\\\\) => setClosureOpen\\\\\\(true\\\\\\)\\\\}\\\\n        onSearch=\\\\{\\\\\\(\\\\\\) => setSearchOpen\\\\\\(true\\\\\\)\\\\}\\\\n        onToday=\\\\{\\\\\\(\\\\\\) => \\\\{\\\\n          setVisibleMonth\\\\\\(undefined\\\\\\);\\\\n          router\\\\.push\\\\\\(`\\\\/citas\\\\?view=day&date=\\\\$\\\\{format\\\\\\(new Date\\\\\\(\\\\\\), \"yyyy-MM-dd\"\\\\\\)\\\\}`\\\\\\);\\\\n        \\\\}\\\\}/onNewAppointment={handleNewAppointment}\\\\n        onBlockHours={handleBlockHours}\\\\n        onCloseDays={handleCloseDays}\\\\n        onSearch={handleSearch}\\\\n        onToday={handleToday}/' src/components/citas/calendar-shell.tsx)",
+      "Bash(perl -0pi -e 's/onSlotClick=\\\\{\\\\\\(d, t\\\\\\) => setSlot\\\\\\(\\\\{ date: d, time: t \\\\}\\\\\\)\\\\}/onSlotClick={handleSlotClick}/' src/components/citas/calendar-shell.tsx)",
+      "Bash(perl -0pi -e 's/onSelect=\\\\{setSelected\\\\}/onSelect={handleSelect}/' src/components/citas/calendar-shell.tsx)",
+      "Bash(sed -i 's|    <div className=\"space-y-4\">\\\\n      <RealtimeRefresher|X|' src/components/citas/calendar-shell.tsx)",
+      "Bash(perl -0pi -e 's/    <div className=\"space-y-4\">\\\\n      <RealtimeRefresher/    <div className=\"space-y-3\">\\\\n      <RealtimeRefresher/' src/components/citas/calendar-shell.tsx)",
+      "Bash(git commit -m 'Centre the appointment card, add month dividers, remove the day lag *)"
     ]
   }
 }

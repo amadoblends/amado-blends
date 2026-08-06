@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -68,28 +68,41 @@ export function CalendarShell({
 
   const todaysClosure = closureFor(date, closures);
 
-  function openWizardAt(seed: { date: string; time: string } | null) {
+  // Stable identities keep the memoised toolbar, strip and timeline still
+  const openWizardAt = useCallback((seed: { date: string; time: string } | null) => {
     setWizardSeed(seed);
     setSlot(null);
     setWizardOpen(true);
-  }
+  }, []);
+
+  const handleNewAppointment = useCallback(() => openWizardAt(null), [openWizardAt]);
+  const handleBlockHours = useCallback(() => setBlockOpen(true), []);
+  const handleCloseDays = useCallback(() => setClosureOpen(true), []);
+  const handleSearch = useCallback(() => setSearchOpen(true), []);
+  const handleSlotClick = useCallback(
+    (d: string, t: string) => setSlot({ date: d, time: t }),
+    []
+  );
+  const handleSelect = useCallback((a: AppointmentRow) => setSelected(a), []);
+
+  const handleToday = useCallback(() => {
+    setVisibleMonth(undefined);
+    router.push(`/citas?view=day&date=${format(new Date(), "yyyy-MM-dd")}`, { scroll: false });
+  }, [router]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <RealtimeRefresher tables={["appointments", "blocked_times", "closures"]} />
 
       <CalendarToolbar
         view={view}
         date={date}
         displayDate={view === "day" ? visibleMonth : undefined}
-        onNewAppointment={() => openWizardAt(null)}
-        onBlockHours={() => setBlockOpen(true)}
-        onCloseDays={() => setClosureOpen(true)}
-        onSearch={() => setSearchOpen(true)}
-        onToday={() => {
-          setVisibleMonth(undefined);
-          router.push(`/citas?view=day&date=${format(new Date(), "yyyy-MM-dd")}`);
-        }}
+        onNewAppointment={handleNewAppointment}
+        onBlockHours={handleBlockHours}
+        onCloseDays={handleCloseDays}
+        onSearch={handleSearch}
+        onToday={handleToday}
       />
 
       {/* Day strip sits between the header and the timeline */}
@@ -120,7 +133,7 @@ export function CalendarShell({
           dayAvail={dayAvail}
           dateStr={dateStr}
           blockedTimes={blockedTimes}
-          onSelect={setSelected}
+          onSelect={handleSelect}
         />
       )}
 
@@ -131,7 +144,7 @@ export function CalendarShell({
           blockedTimes={blockedTimes}
           closures={closures}
           availability={availability}
-          onSlotClick={(d, t) => setSlot({ date: d, time: t })}
+          onSlotClick={handleSlotClick}
         />
       )}
 

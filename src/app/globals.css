@@ -167,6 +167,22 @@ textarea {
   scrollbar-width: none;
 }
 
+/* Floating card entrance — short and GPU-friendly */
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.animate-sheet-in {
+  animation: sheet-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200% 0;

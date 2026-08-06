@@ -1,12 +1,15 @@
 "use client";
 
+import { memo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  addDays, addMonths, addYears, subDays, subMonths, subYears, format, startOfWeek, endOfWeek,
+  addDays, addMonths, addYears, subDays, subMonths, subYears, format,
+  startOfWeek, endOfWeek,
 } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  ChevronLeft, ChevronRight, Search, Plus, Lock, CalendarOff, Calendar as CalendarIcon,
+  ChevronLeft, ChevronRight, Search, Plus, Lock, CalendarOff,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +22,7 @@ const VIEWS: { key: CalendarView; label: string }[] = [
   { key: "year", label: "Año" },
 ];
 
-export function CalendarToolbar({
+function CalendarToolbarBase({
   view,
   date,
   displayDate,
@@ -56,7 +59,9 @@ export function CalendarToolbar({
     go(move(date, 1));
   }
 
-  // On day view the header follows the strip, so it shows month + year only
+  // Day view navigates by swiping the strip, so it needs no arrows
+  const showArrows = view !== "day";
+
   const title =
     view === "day"
       ? format(titleDate, "MMMM yyyy", { locale: es })
@@ -67,52 +72,57 @@ export function CalendarToolbar({
           : format(date, "yyyy");
 
   return (
-    <div className="space-y-3">
-      {/* Row 1 — title, navigation, primary actions */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <h1 className="text-xl md:text-2xl font-bold text-foreground capitalize flex-1 min-w-0 truncate">
+    <div className="space-y-2.5">
+      {/* Row 1 — symmetric: today left, title centred, new right */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <TodayButton onClick={() => (onToday ? onToday() : go(new Date()))} />
+          {showArrows && (
+            <button
+              onClick={() => shift(-1)}
+              aria-label="Anterior"
+              className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* Fixed centre: min-w-0 stops long titles pushing the buttons out */}
+        <h1 className="flex-1 min-w-0 text-center text-base sm:text-lg font-bold text-foreground capitalize truncate px-1">
           {title}
         </h1>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {showArrows && (
+            <button
+              onClick={() => shift(1)}
+              aria-label="Siguiente"
+              className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background"
+            >
+              <ChevronRight size={16} />
+            </button>
+          )}
           <button
-            onClick={() => shift(-1)}
-            aria-label="Anterior"
-            className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background"
+            onClick={onNewAppointment}
+            aria-label="Nueva cita"
+            className="h-9 px-3 rounded-xl bg-brand text-white text-xs font-bold flex items-center gap-1 whitespace-nowrap active:scale-95 transition-transform"
           >
-            <ChevronLeft size={16} />
-          </button>
-          {/* Calendar glyph carrying today's date */}
-          <button
-            onClick={() => (onToday ? onToday() : go(new Date()))}
-            aria-label="Ir a hoy"
-            title="Ir a hoy"
-            className="relative w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background"
-          >
-            <CalendarIcon size={19} className="text-muted" strokeWidth={1.6} />
-            <span className="absolute inset-x-0 bottom-[7px] text-[9px] font-black text-foreground leading-none">
-              {format(new Date(), "d")}
-            </span>
-          </button>
-          <button
-            onClick={() => shift(1)}
-            aria-label="Siguiente"
-            className="w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background"
-          >
-            <ChevronRight size={16} />
+            <Plus size={15} strokeWidth={2.6} />
+            <span className="hidden xs:inline sm:inline">Nueva</span>
           </button>
         </div>
       </div>
 
-      {/* Row 2 — view switcher plus the tools, scrollable on phones */}
+      {/* Row 2 — views on the left, tools on the right, all inside the width */}
       <div className="flex items-center gap-2">
-        <div className="flex rounded-xl bg-surface border border-border p-1 shrink-0">
+        <div className="flex rounded-xl bg-surface border border-border p-0.5 flex-1 min-w-0">
           {VIEWS.map((v) => (
             <button
               key={v.key}
               onClick={() => go(date, v.key)}
               className={cn(
-                "h-8 px-3 rounded-lg text-xs font-semibold transition-colors",
+                "flex-1 h-8 rounded-lg text-[11px] font-semibold transition-colors truncate px-1",
                 view === v.key ? "bg-foreground text-background" : "text-muted"
               )}
             >
@@ -121,27 +131,29 @@ export function CalendarToolbar({
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5 ml-auto overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 shrink-0">
           <ToolButton onClick={onSearch} icon={<Search size={15} />} label="Buscar" />
-          <ToolButton
-            onClick={onBlockHours}
-            icon={<Lock size={15} />}
-            label="Bloquear horas"
-          />
-          <ToolButton
-            onClick={onCloseDays}
-            icon={<CalendarOff size={15} />}
-            label="Cerrar días"
-          />
-          <button
-            onClick={onNewAppointment}
-            className="h-9 px-3 rounded-xl bg-brand text-white text-xs font-bold flex items-center gap-1.5 shrink-0 active:scale-95 transition-transform"
-          >
-            <Plus size={15} /> Nueva cita
-          </button>
+          <ToolButton onClick={onBlockHours} icon={<Lock size={15} />} label="Bloquear horas" />
+          <ToolButton onClick={onCloseDays} icon={<CalendarOff size={15} />} label="Cerrar días" />
         </div>
       </div>
     </div>
+  );
+}
+
+function TodayButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Ir a hoy"
+      title="Ir a hoy"
+      className="relative w-9 h-9 rounded-xl border border-border bg-surface flex items-center justify-center active:bg-background shrink-0"
+    >
+      <CalendarIcon size={19} className="text-muted" strokeWidth={1.6} />
+      <span className="absolute inset-x-0 bottom-[7px] text-[9px] font-black text-foreground leading-none">
+        {format(new Date(), "d")}
+      </span>
+    </button>
   );
 }
 
@@ -158,10 +170,13 @@ function ToolButton({
     <button
       onClick={onClick}
       title={label}
-      className="h-9 px-2.5 md:px-3 rounded-xl border border-border bg-surface text-xs font-semibold text-foreground flex items-center gap-1.5 shrink-0 active:bg-background"
+      aria-label={label}
+      className="w-9 h-9 rounded-xl border border-border bg-surface text-foreground flex items-center justify-center shrink-0 active:bg-background"
     >
       {icon}
-      <span className="hidden md:inline">{label}</span>
     </button>
   );
 }
+
+// The toolbar only changes with the view or the visible month
+export const CalendarToolbar = memo(CalendarToolbarBase);
