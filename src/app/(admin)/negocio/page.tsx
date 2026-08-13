@@ -5,7 +5,9 @@ export default async function NegocioPage() {
   const supabase = await createClient();
   const { data: business } = await supabase
     .from("business_settings")
-    .select("name, logo_url, cover_url, description, instagram, address, phone")
+    .select(
+      "name, logo_url, cover_url, description, instagram, address, phone, notify_email"
+    )
     .eq("id", 1)
     .maybeSingle();
 
@@ -18,6 +20,7 @@ export default async function NegocioPage() {
       instagram={business?.instagram ?? ""}
       address={business?.address ?? ""}
       phone={business?.phone ?? ""}
+      notifyEmail={business?.notify_email ?? ""}
     />
   );
 }

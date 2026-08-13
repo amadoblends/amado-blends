@@ -3,6 +3,11 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import {
+  notifyCreatedByBarber,
+  notifyCancelledByBarber,
+  notifyRescheduledByBarber,
+} from "@/lib/actions/notify";
 
 const appointmentSchema = z.object({
   clientId: z.string().uuid(),
@@ -42,21 +47,32 @@ export async function createAppointment(formData: FormData): Promise<ActionResul
   }
   const endsAt = new Date(startsAt.getTime() + parsed.data.durationMinutes * 60000);
 
-  const { error } = await supabase.from("appointments").insert({
-    client_id: parsed.data.clientId,
-    service_id: parsed.data.serviceId,
-    starts_at: startsAt.toISOString(),
-    ends_at: endsAt.toISOString(),
-    price: parsed.data.price,
-    notes: parsed.data.notes ?? null,
-    status: "pendiente",
-  });
+  const { data: inserted, error } = await supabase
+    .from("appointments")
+    .insert({
+      client_id: parsed.data.clientId,
+      service_id: parsed.data.serviceId,
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+      price: parsed.data.price,
+      notes: parsed.data.notes ?? null,
+      status: "pendiente",
+    })
+    .select("id")
+    .single();
 
   if (error) {
     if (error.code === "23P01") {
       return { ok: false, error: "Ya existe una cita en ese horario." };
     }
     return { ok: false, error: "No se pudo crear la cita." };
+  }
+
+  // Confirmation to the client and a copy to the shop. Awaited so a serverless
+  // function isn't torn down mid-send, but any failure is swallowed — the
+  // appointment is already saved.
+  if (inserted?.id) {
+    await notifyCreatedByBarber(inserted.id).catch(() => {});
   }
 
   revalidatePath("/citas");
@@ -99,6 +115,13 @@ export async function rescheduleAppointment(formData: FormData): Promise<ActionR
 
   const endsAt = new Date(startsAt.getTime() + service.duration_minutes * 60000);
 
+  // Read the old time before overwriting it — the email says "antes era..."
+  const { data: before } = await supabase
+    .from("appointments")
+    .select("starts_at")
+    .eq("id", parsed.data.appointmentId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("appointments")
     .update({
@@ -124,6 +147,12 @@ export async function rescheduleAppointment(formData: FormData): Promise<ActionR
       ? `Tu nueva cita es el ${parsed.data.displayWhen}. Toca para ver los detalles.`
       : "El barbero cambió el horario de tu cita. Toca para ver los detalles."
   );
+
+  if (before?.starts_at) {
+    await notifyRescheduledByBarber(parsed.data.appointmentId, before.starts_at).catch(
+      () => {}
+    );
+  }
 
   revalidatePath("/citas");
   revalidatePath(`/citas/${parsed.data.appointmentId}`);
@@ -152,7 +181,15 @@ async function notifyAppointmentClient(
   });
 }
 
-const statusSchema = z.enum(["confirmada", "pendiente", "completada", "cancelada"]);
+// "no_show" was missing here, so the detail card's "No asistió" button was
+// rejected as invalid before it ever reached the database.
+const statusSchema = z.enum([
+  "confirmada",
+  "pendiente",
+  "completada",
+  "cancelada",
+  "no_show",
+]);
 
 export async function updateAppointmentStatus(appointmentId: string, status: string): Promise<ActionResult> {
   const supabase = await createClient();
@@ -173,6 +210,12 @@ export async function updateAppointmentStatus(appointmentId: string, status: str
     .eq("id", parsedId.data);
 
   if (error) return { ok: false, error: "No se pudo actualizar la cita." };
+
+  if (parsedStatus.data === "cancelada" || parsedStatus.data === "no_show") {
+    // Email: the client hears about a cancellation, but a no-show is only
+    // recorded for the shop — see notifyCancelledByBarber.
+    await notifyCancelledByBarber(parsedId.data, parsedStatus.data).catch(() => {});
+  }
 
   if (parsedStatus.data === "cancelada") {
     await notifyAppointmentClient(

@@ -13,6 +13,7 @@ const businessSchema = z.object({
   instagram: z.string().trim().max(60).optional().or(z.literal("")),
   address: z.string().trim().max(200).optional().or(z.literal("")),
   phone: z.string().trim().max(30).optional().or(z.literal("")),
+  notifyEmail: z.string().trim().email().max(160).optional().or(z.literal("")),
 });
 
 export async function updateBusiness(formData: FormData): Promise<ActionResult> {
@@ -30,6 +31,7 @@ export async function updateBusiness(formData: FormData): Promise<ActionResult> 
     instagram: formData.get("instagram") || "",
     address: formData.get("address") || "",
     phone: formData.get("phone") || "",
+    notifyEmail: formData.get("notifyEmail") || "",
   });
   if (!parsed.success) return { ok: false, error: "Revisa los datos del negocio." };
 
@@ -43,6 +45,7 @@ export async function updateBusiness(formData: FormData): Promise<ActionResult> 
       instagram: parsed.data.instagram?.replace(/^@/, "") || null,
       address: parsed.data.address || null,
       phone: parsed.data.phone || null,
+      notify_email: parsed.data.notifyEmail || null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "id" }

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Store, Check, Loader2, ImageIcon } from "lucide-react";
+import { Store, Check, Loader2, ImageIcon, Mail } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { ImageUploader } from "@/components/ui/image-uploader";
 import { updateBusiness } from "@/lib/actions/business";
@@ -16,6 +16,7 @@ export function BusinessForm({
   instagram,
   address,
   phone,
+  notifyEmail,
 }: {
   name: string;
   logoUrl: string | null;
@@ -24,6 +25,7 @@ export function BusinessForm({
   instagram: string;
   address: string;
   phone: string;
+  notifyEmail: string;
 }) {
   const router = useRouter();
   const [logoUrl, setLogoUrl] = useState(initialLogo);
@@ -159,6 +161,33 @@ export function BusinessForm({
               maxLength={30}
               defaultValue={phone}
               placeholder="787-555-0000"
+              className="form-input"
+            />
+          </Field>
+        </div>
+
+        {/* Where the shop's copy of every appointment notice lands */}
+        <div className="bg-surface rounded-2xl border border-border p-4 space-y-4">
+          <div className="flex items-start gap-2">
+            <Mail size={15} className="text-brand shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Correo para notificaciones
+              </p>
+              <p className="text-xs text-muted mt-0.5">
+                Aquí te avisamos cada vez que se crea, cancela o mueve una cita. Puede ser
+                tu Gmail personal o el correo de la compañía.
+              </p>
+            </div>
+          </div>
+
+          <Field label="Correo que recibe los avisos">
+            <input
+              name="notifyEmail"
+              type="email"
+              maxLength={160}
+              defaultValue={notifyEmail}
+              placeholder="tucorreo@gmail.com"
               className="form-input"
             />
           </Field>
