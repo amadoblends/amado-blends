@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getUser } from "@/lib/auth";
 import { sendAll, emailConfigured } from "@/lib/email/send";
 import { resolveBarberInbox } from "@/lib/email/recipients";
+import { calendarInvite } from "@/lib/email/invite";
 import {
   clientBookingConfirmed,
   barberNewBooking,
@@ -108,10 +109,17 @@ export async function notifyCreatedByBarber(appointmentId: string): Promise<void
   const to = await barberInbox();
   const mails = [];
 
+  // Puts it on their calendar, not just in their inbox
+  const invite = calendarInvite(appointmentId, data, {
+    method: "REQUEST",
+    sequence: 0,
+    attendeeEmail: clientEmail,
+  });
+
   // Worth sending: the client may not have been watching when it was booked
   if (clientEmail) {
     const m = clientBookingConfirmed(data);
-    mails.push({ to: clientEmail, subject: m.subject, html: m.html, text: m.text });
+    mails.push({ to: clientEmail, subject: m.subject, html: m.html, text: m.text, attachments: [invite] });
   }
   if (to) {
     const m = barberNewBooking(data);
@@ -121,6 +129,7 @@ export async function notifyCreatedByBarber(appointmentId: string): Promise<void
       html: m.html,
       text: m.text,
       replyTo: clientEmail ?? undefined,
+      attachments: [invite],
     });
   }
 
@@ -140,15 +149,22 @@ export async function notifyCancelledByBarber(
   const to = await barberInbox();
   const mails = [];
 
+  // CANCEL with a high sequence removes it from the calendar for good
+  const invite = calendarInvite(appointmentId, data, {
+    method: "CANCEL",
+    sequence: 99,
+    attendeeEmail: clientEmail,
+  });
+
   // A no-show is for the shop's records — telling the client off by email
   // isn't the app's job, so only the barber gets that one.
   if (clientEmail && reason === "cancelada") {
     const m = bookingCancelled(data, { forBarber: false });
-    mails.push({ to: clientEmail, subject: m.subject, html: m.html, text: m.text });
+    mails.push({ to: clientEmail, subject: m.subject, html: m.html, text: m.text, attachments: [invite] });
   }
   if (to) {
     const m = bookingCancelled(data, { forBarber: true });
-    mails.push({ to, subject: m.subject, html: m.html, text: m.text });
+    mails.push({ to, subject: m.subject, html: m.html, text: m.text, attachments: [invite] });
   }
 
   await sendAll(mails);
@@ -167,13 +183,20 @@ export async function notifyRescheduledByBarber(
   const to = await barberInbox();
   const mails = [];
 
+  // Same UID, higher sequence: the existing entry moves instead of doubling
+  const invite = calendarInvite(appointmentId, data, {
+    method: "REQUEST",
+    sequence: 1,
+    attendeeEmail: clientEmail,
+  });
+
   if (clientEmail) {
     const m = bookingRescheduled(data, { startsAt: previousStartsAt }, { forBarber: false });
-    mails.push({ to: clientEmail, subject: m.subject, html: m.html, text: m.text });
+    mails.push({ to: clientEmail, subject: m.subject, html: m.html, text: m.text, attachments: [invite] });
   }
   if (to) {
     const m = bookingRescheduled(data, { startsAt: previousStartsAt }, { forBarber: true });
-    mails.push({ to, subject: m.subject, html: m.html, text: m.text });
+    mails.push({ to, subject: m.subject, html: m.html, text: m.text, attachments: [invite] });
   }
 
   await sendAll(mails);

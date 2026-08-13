@@ -7,6 +7,7 @@ import { Store, Check, Loader2, ImageIcon, Mail } from "lucide-react";
 import { BackButton } from "@/components/ui/back-button";
 import { ImageUploader } from "@/components/ui/image-uploader";
 import { updateBusiness } from "@/lib/actions/business";
+import { EmailTestButton } from "@/components/negocio/email-test-button";
 
 export function BusinessForm({
   name,
@@ -191,6 +192,15 @@ export function BusinessForm({
               className="form-input"
             />
           </Field>
+
+          {/* Guarda primero: la prueba usa el valor ya guardado */}
+          <div className="pt-1 border-t border-border">
+            <p className="text-xs text-muted mb-2.5 pt-3">
+              Guarda los cambios y luego prueba. Te llegará una cita de ejemplo con su
+              archivo de calendario.
+            </p>
+            <EmailTestButton />
+          </div>
         </div>
 
         {error && <p className="text-sm text-danger bg-danger-light rounded-xl px-3 py-2">{error}</p>}
