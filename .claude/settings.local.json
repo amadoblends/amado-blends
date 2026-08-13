@@ -77,7 +77,13 @@
       "Bash(grep -rn 'href=\"/servicios\"\\\\|href={`/servicios' src/)",
       "Bash(perl -0pi -e 's/ Package,\\\\n\\\\n Images,/ Package,\\\\n Images,/' src/app/\\\\\\(admin\\\\\\)/mas/page.tsx)",
       "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(JSON.stringify\\({...p.dependencies},null,1\\)\\)\")",
-      "Bash(sed -i 's|import { localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins } from \"@/lib/time\";|import { localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins } from \"@/lib/time\";\\\\nimport { shopDateAt, endOfShopDay } from \"@/lib/timezone\";|' src/components/citas/block-detail-modal.tsx)"
+      "Bash(sed -i 's|import { localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins } from \"@/lib/time\";|import { localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins } from \"@/lib/time\";\\\\nimport { shopDateAt, endOfShopDay } from \"@/lib/timezone\";|' src/components/citas/block-detail-modal.tsx)",
+      "Bash(sed -i 's|`/tmp/mailtest/${name}.html`|new URL\\(`./${name}.html`, import.meta.url\\)|' /tmp/mailtest/run.ts)",
+      "Bash(node --experimental-strip-types /tmp/mailtest/run.ts)",
+      "Bash(perl -0pi -e 's/subject: `Cita confirmada · \\\\$\\\\{shopLongDate\\\\\\(d\\\\.startsAt\\\\\\)\\\\} a las \\\\$\\\\{shopTime\\\\\\(d\\\\.startsAt\\\\\\)\\\\}`,/subject: `Cita confirmada · \\\\${shopShort\\(d.startsAt\\)}, \\\\${shopTime\\(d.startsAt\\)}`,/; s/subject: `Nueva cita · \\\\$\\\\{d\\\\.clientName\\\\} · \\\\$\\\\{shopLongDate\\\\\\(d\\\\.startsAt\\\\\\)\\\\} \\\\$\\\\{shopTime\\\\\\(d\\\\.startsAt\\\\\\)\\\\}`,/subject: `Nueva cita · \\\\${d.clientName} · \\\\${shopShort\\(d.startsAt\\)}, \\\\${shopTime\\(d.startsAt\\)}`,/; s/subject: `Recordatorio · tu cita es \\\\$\\\\{shopLongDate\\\\\\(d\\\\.startsAt\\\\\\)\\\\} a las \\\\$\\\\{shopTime\\\\\\(d\\\\.startsAt\\\\\\)\\\\}`,/subject: `Recordatorio · tu cita es \\\\${shopShort\\(d.startsAt\\)}, \\\\${shopTime\\(d.startsAt\\)}`,/' src/lib/email/templates.ts)",
+      "Bash(cp src/lib/timezone.ts /tmp/mailtest/timezone.ts)",
+      "Bash(sed 's|@/lib/timezone|./timezone.ts|' src/lib/email/templates.ts)",
+      "Bash(node -e ' *)"
     ]
   }
 }
