@@ -14,16 +14,13 @@ import type { AppointmentRow, BlockedRange, ClosureRange } from "@/lib/data/appo
 import type { AvailabilityDay } from "@/lib/data/availability";
 
 /*
- * Duration is expressed by WHERE a card sits on the hour rail and by the time
- * range it covers — never by how tall it is. Every card is the same height so
- * the day reads as one uniform column.
- *
- * The rail is spaced so the shortest normal gap (half an hour) still leaves a
- * clean margin between two consecutive cards.
+ * A card's height IS its duration: 45 minutes of service covers exactly 45
+ * minutes of the rail, so the day can be read by eye. Density changes how
+ * many pixels an hour is worth — never how long anything lasts.
  */
-const HOUR_H = 124;
-const BLOCK_H = 56;
-const BLOCK_GAP = 6;
+const BLOCK_GAP = 3;
+/** Below this a card can't fit an avatar and two lines, so it goes one-line. */
+const TIGHT_H = 52;
 
 const STATUS_LABEL: Record<string, string> = {
   confirmada: "Confirmada",
@@ -61,14 +58,16 @@ function NowIndicator({
   nowMins,
   dayStart,
   dayEnd,
+  hourH,
 }: {
   nowMins: number | null;
   dayStart: number;
   dayEnd: number;
+  hourH: number;
 }) {
   if (nowMins === null || nowMins < dayStart || nowMins > dayEnd) return null;
 
-  const top = ((nowMins - dayStart) / 60) * HOUR_H;
+  const top = ((nowMins - dayStart) / 60) * hourH;
   return (
     <div
       className="absolute left-0 right-0 z-20 pointer-events-none"
@@ -158,10 +157,13 @@ function DayTimelineBase({
   closure = null,
   shortestServiceMins,
   draft,
+  hourH,
   onSelect,
   onSlotTap,
   onDraftTap,
   onSlotRejected,
+  onBlockTap,
+  onClosureTap,
 }: {
   appointments: AppointmentRow[];
   dayAvail: AvailabilityDay | null;
@@ -169,6 +171,8 @@ function DayTimelineBase({
   blockedTimes?: BlockedRange[];
   closure?: ClosureRange | null;
   shortestServiceMins: number;
+  /** Pixels per hour — set by the density preference. */
+  hourH: number;
   /** The pencilled-in slot waiting for a second tap. */
   draft: { date: string; time: string } | null;
   onSelect?: (a: AppointmentRow) => void;
@@ -177,6 +181,10 @@ function DayTimelineBase({
   /** Second tap, on the placeholder itself — opens the action card. */
   onDraftTap?: () => void;
   onSlotRejected?: (verdict: SlotVerdict) => void;
+  /** Tapping a blocked stretch opens it for editing or removal. */
+  onBlockTap?: (block: BlockedRange) => void;
+  /** Tapping the closure banner area opens the closure for editing. */
+  onClosureTap?: (closure: ClosureRange) => void;
 }) {
   const [photo, setPhoto] = useState<{ src: string | null; name: string } | null>(null);
 
@@ -206,7 +214,9 @@ function DayTimelineBase({
   const breakStart = dayAvail.break_start_time ? toMins(dayAvail.break_start_time) : null;
   const breakEnd = dayAvail.break_end_time ? toMins(dayAvail.break_end_time) : null;
   const step = dayAvail.slot_minutes || 30;
-  const totalH = ((dayEnd - dayStart) / 60) * HOUR_H;
+  const totalH = ((dayEnd - dayStart) / 60) * hourH;
+  /** Minutes → pixels, the one conversion the whole view is built on. */
+  const y = (mins: number) => ((mins - dayStart) / 60) * hourH;
 
   const hours: number[] = [];
   for (let t = Math.ceil(dayStart / 60) * 60; t <= dayEnd; t += 60) hours.push(t);
@@ -263,7 +273,7 @@ function DayTimelineBase({
             <div
               key={t}
               className="absolute right-2.5 text-[10px] font-semibold text-muted leading-none tnum"
-              style={{ top: ((t - dayStart) / 60) * HOUR_H - 4 }}
+              style={{ top: y(t) - 4 }}
             >
               {fmtMins(t)}
             </div>
@@ -275,7 +285,7 @@ function DayTimelineBase({
             <div
               key={t}
               className="absolute left-0 right-0 h-px bg-border"
-              style={{ top: ((t - dayStart) / 60) * HOUR_H }}
+              style={{ top: y(t) }}
             />
           ))}
 
@@ -286,7 +296,7 @@ function DayTimelineBase({
               onClick={() => handleSlot(t)}
               aria-label={`${fmtMins(t)}`}
               className="absolute left-0 right-0 rounded-xl active:bg-surface/60"
-              style={{ top: ((t - dayStart) / 60) * HOUR_H, height: (step / 60) * HOUR_H }}
+              style={{ top: y(t), height: (step / 60) * hourH }}
             />
           ))}
 
@@ -295,8 +305,8 @@ function DayTimelineBase({
             <div
               className="absolute left-0 right-0 rounded-2xl flex items-center justify-center pointer-events-none"
               style={{
-                top: ((breakStart - dayStart) / 60) * HOUR_H,
-                height: ((breakEnd - breakStart) / 60) * HOUR_H,
+                top: y(breakStart),
+                height: ((breakEnd - breakStart) / 60) * hourH,
                 background: "color-mix(in srgb, var(--color-muted) 7%, transparent)",
               }}
             >
@@ -304,26 +314,29 @@ function DayTimelineBase({
             </div>
           )}
 
-          {/* Blocked hours */}
+          {/* Blocked hours — tap to edit or remove them */}
           {blocked.map((b) => {
             const sMins = localMins(b.starts_at);
             const dur = durationMins(b.starts_at, b.ends_at);
+            const h = Math.max((dur / 60) * hourH - BLOCK_GAP, 22);
             return (
-              <div
+              <button
                 key={b.id}
-                className="absolute left-0 right-0 rounded-2xl flex items-center justify-center gap-1.5 pointer-events-none"
+                onClick={() => onBlockTap?.(b)}
+                aria-label={`Bloqueo ${fmtMins(sMins)} — tocar para editar`}
+                className="absolute left-0 right-0 rounded-xl flex items-center justify-center gap-1.5 z-[5] active:scale-[0.985] transition-transform overflow-hidden"
                 style={{
-                  top: ((sMins - dayStart) / 60) * HOUR_H,
-                  height: Math.max((dur / 60) * HOUR_H - BLOCK_GAP, 24),
+                  top: y(sMins),
+                  height: h,
                   background:
-                    "repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 6px, color-mix(in srgb, var(--color-muted) 10%, transparent) 12px)",
+                    "repeating-linear-gradient(45deg, transparent, transparent 6px, color-mix(in srgb, var(--color-muted) 12%, transparent) 6px, color-mix(in srgb, var(--color-muted) 12%, transparent) 12px)",
                 }}
               >
-                <Lock size={11} className="text-muted" />
-                <span className="text-[10px] font-bold text-muted">
+                <Lock size={11} className="text-muted shrink-0" />
+                <span className="text-[10px] font-bold text-muted truncate px-1">
                   {b.reason || "Bloqueado"}
                 </span>
-              </div>
+              </button>
             );
           })}
 
@@ -331,8 +344,13 @@ function DayTimelineBase({
           {draftMins !== null && (
             <button
               onClick={onDraftTap}
-              className="absolute left-0 right-0 rounded-2xl border-2 border-dashed border-brand bg-brand-light flex items-center justify-between px-3 z-10 animate-view-in"
-              style={{ top: ((draftMins - dayStart) / 60) * HOUR_H, height: BLOCK_H }}
+              className="absolute left-0 right-0 rounded-xl border-2 border-dashed border-brand bg-brand-light flex items-center justify-between px-3 z-10 animate-view-in overflow-hidden"
+              style={{
+                top: y(draftMins),
+                // Sized like the shortest bookable service, so the placeholder
+                // shows how much room the slot actually has
+                height: Math.max((shortestServiceMins / 60) * hourH - BLOCK_GAP, 34),
+              }}
             >
               <span className="text-left">
                 <span className="block text-[11px] font-bold text-brand tnum">
@@ -348,22 +366,19 @@ function DayTimelineBase({
             </button>
           )}
 
-          {/* Appointment cards — identical size for every appointment */}
-          {sorted.map((a, i) => {
+          {/* Appointment cards — height is the real duration */}
+          {sorted.map((a) => {
             const sMins = localMins(a.starts_at);
             const dur = durationMins(a.starts_at, a.ends_at);
             const eMins = sMins + dur;
-            const top = ((sMins - dayStart) / 60) * HOUR_H;
+            const top = y(sMins);
 
-            // Only shrinks when the next appointment starts sooner than the
-            // card is tall, which keeps them from overlapping.
-            const nextStart = sorted[i + 1] ? localMins(sorted[i + 1].starts_at) : null;
-            const roomPx =
-              nextStart === null
-                ? Number.POSITIVE_INFINITY
-                : ((nextStart - sMins) / 60) * HOUR_H - BLOCK_GAP;
-            const height = Math.max(Math.min(BLOCK_H, roomPx), 34);
-            const tight = height < BLOCK_H - 6;
+            // The card spans exactly its own minutes, less a hairline so two
+            // back-to-back appointments stay visually separate.
+            const exact = (dur / 60) * hourH;
+            const height = Math.max(exact - BLOCK_GAP, 26);
+            const tight = height < TIGHT_H;
+            const veryTight = height < 34;
 
             const running = nowMins !== null && nowMins >= sMins && nowMins < eMins;
             const finished = nowMins !== null ? nowMins >= eMins : false;
@@ -382,7 +397,7 @@ function DayTimelineBase({
                 key={a.id}
                 onClick={() => onSelect?.(a)}
                 className={cn(
-                  "absolute left-0 right-0 rounded-2xl overflow-hidden text-left",
+                  "absolute left-0 right-0 rounded-xl overflow-hidden text-left",
                   "active:scale-[0.985] transition-[opacity,transform] duration-150",
                   warm ? "bg-brand-light" : "bg-surface",
                   running && "ring-[1.5px] ring-brand",
@@ -401,35 +416,58 @@ function DayTimelineBase({
                   )}
                 />
 
-                <div className="flex items-center gap-2.5 h-full pl-3 pr-3">
-                  <Avatar
-                    name={a.guest_name ?? a.client.full_name}
-                    avatarUrl={a.guest_name ? null : a.client.avatar_url}
-                    size={tight ? 28 : 36}
-                    onExpand={() =>
-                      setPhoto({
-                        src: a.guest_name ? null : a.client.avatar_url,
-                        name: a.guest_name ?? a.client.full_name,
-                      })
-                    }
-                  />
+                {/*
+                  * A short service leaves little room, so detail is dropped in
+                  * order of usefulness: price and status first, then the
+                  * service name, leaving the name and time always readable.
+                  */}
+                <div
+                  className={cn(
+                    "flex items-center gap-2 h-full pl-3 pr-2.5",
+                    veryTight && "gap-1.5"
+                  )}
+                >
+                  {!veryTight && (
+                    <Avatar
+                      name={a.guest_name ?? a.client.full_name}
+                      avatarUrl={a.guest_name ? null : a.client.avatar_url}
+                      size={tight ? 26 : 34}
+                      onExpand={() =>
+                        setPhoto({
+                          src: a.guest_name ? null : a.client.avatar_url,
+                          name: a.guest_name ?? a.client.full_name,
+                        })
+                      }
+                    />
+                  )}
 
                   <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        "text-[11px] font-bold leading-tight tnum",
-                        running ? "text-brand" : "text-muted"
-                      )}
-                    >
-                      {fmtMins(sMins)}
-                    </p>
-                    <p className="text-[14px] font-bold text-foreground truncate leading-tight">
-                      {name}
-                    </p>
-                    {!tight && (
-                      <p className="text-[11px] font-medium text-muted truncate leading-tight">
-                        {a.service.name}
+                    {veryTight ? (
+                      <p className="text-[12px] font-bold text-foreground truncate leading-tight">
+                        <span className={cn("tnum mr-1.5", running ? "text-brand" : "text-muted")}>
+                          {fmtMins(sMins)}
+                        </span>
+                        {name}
                       </p>
+                    ) : (
+                      <>
+                        <p
+                          className={cn(
+                            "text-[11px] font-bold leading-tight tnum",
+                            running ? "text-brand" : "text-muted"
+                          )}
+                        >
+                          {fmtMins(sMins)}
+                        </p>
+                        <p className="text-[14px] font-bold text-foreground truncate leading-tight">
+                          {name}
+                        </p>
+                        {!tight && (
+                          <p className="text-[11px] font-medium text-muted truncate leading-tight">
+                            {a.service.name}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -467,7 +505,12 @@ function DayTimelineBase({
           })}
 
           {/* Drawn last so it rides on top of the cards it crosses */}
-          <NowIndicator nowMins={nowMins} dayStart={dayStart} dayEnd={dayEnd} />
+          <NowIndicator
+            nowMins={nowMins}
+            dayStart={dayStart}
+            dayEnd={dayEnd}
+            hourH={hourH}
+          />
         </div>
       </div>
 

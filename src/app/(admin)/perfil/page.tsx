@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getUser } from "@/lib/auth";
 import { ProfileForm } from "@/components/perfil/profile-form";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getUser();
 
   const { data: profile } = user
     ? await supabase.from("profiles").select("full_name, avatar_url").eq("id", user.id).single()

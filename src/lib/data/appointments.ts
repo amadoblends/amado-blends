@@ -125,13 +125,17 @@ export interface ClosureRange {
   end_time: string | null;
   reason: string;
   description: string | null;
+  /** The carousel announcement this closure owns, if it was published. */
+  carousel_post_id: string | null;
 }
 
 export async function getClosures(): Promise<ClosureRange[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("closures")
-    .select("id, starts_on, ends_on, all_day, start_time, end_time, reason, description")
+    .select(
+      "id, starts_on, ends_on, all_day, start_time, end_time, reason, description, carousel_post_id"
+    )
     .order("starts_on");
   // Table may not exist yet if migration 17 hasn't run
   if (error || !data) return [];

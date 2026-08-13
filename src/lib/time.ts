@@ -1,12 +1,15 @@
 /**
- * Local-time helpers shared by the calendar, the wizard and the block editors.
+ * Time helpers shared by the calendar, the wizard and the block editors.
  *
- * These five functions had drifted into five separate copies. Everything that
- * converts between an ISO timestamp and "minutes since midnight, as the barber
- * sees it" now lives here.
+ * "Local" here means **the shop's timezone**, not the device's and not the
+ * server's. Everything that reads or writes a wall-clock time goes through
+ * `@/lib/timezone`, so a timestamp renders identically on the barber's phone,
+ * in a server component and in a background job.
  *
  * Server-free on purpose: safe to import from client components.
  */
+
+import { shopDateStr, shopMins, shopDateAt, shopToday } from "@/lib/timezone";
 
 /** "09:30" → 570 */
 export function toMins(hhmm: string): number {
@@ -20,22 +23,14 @@ export function fromMins(mins: number): string {
   return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 }
 
-/** Minutes since local midnight for an ISO timestamp. */
-export function localMins(iso: string): number {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes();
-}
+/** Minutes since midnight in the shop's timezone. */
+export const localMins = shopMins;
 
-/** yyyy-MM-dd in the viewer's timezone (never the server's UTC day). */
-export function localDateStr(iso: string | Date): string {
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+/** The shop-timezone calendar day a timestamp falls on, as yyyy-MM-dd. */
+export const localDateStr = shopDateStr;
 
-/** Today, as yyyy-MM-dd. */
-export function todayStr(): string {
-  return localDateStr(new Date());
-}
+/** Today in the shop's timezone, as yyyy-MM-dd. */
+export const todayStr = shopToday;
 
 /** 570 → "9:30 AM" */
 export function fmtMins(mins: number): string {
@@ -57,8 +52,13 @@ export function durationMins(startISO: string, endISO: string): number {
   return (new Date(endISO).getTime() - new Date(startISO).getTime()) / 60000;
 }
 
-/** A Date at a given minute-of-day on a yyyy-MM-dd, in local time. */
+/**
+ * The instant matching a wall-clock time in the shop.
+ *
+ * Deliberately not `new Date(y, m, d, h, mi)` — that reads the *device's*
+ * timezone, so the same booking stored a different instant depending on where
+ * the phone was.
+ */
 export function dateAt(dateStr: string, mins: number): Date {
-  const [y, mo, d] = dateStr.split("-").map(Number);
-  return new Date(y, mo - 1, d, Math.floor(mins / 60), mins % 60, 0, 0);
+  return shopDateAt(dateStr, fromMins(mins));
 }

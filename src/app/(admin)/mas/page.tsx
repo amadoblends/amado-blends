@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getUser } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
 import { Avatar } from "@/components/ui/avatar";
 import { BackButton } from "@/components/ui/back-button";
@@ -6,7 +7,6 @@ import { ThemePicker } from "@/components/theme/theme-picker";
 import Link from "next/link";
 import {
   Package,
-  Scissors,
   Images,
   Store,
   LogOut,
@@ -23,7 +23,7 @@ const menu = [
   { href: "/perfil", label: "Mi perfil", icon: UserCircle },
   { href: "/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/productos", label: "Productos e inventario", icon: Package },
-  { href: "/servicios", label: "Servicios", icon: Scissors },
+  // Servicios lives on the dashboard's quick actions — no duplicate entry here
   { href: "/promociones", label: "Promociones", icon: BadgePercent },
   { href: "/carrusel", label: "Carrusel del cliente", icon: Images },
   { href: "/negocio", label: "Negocio y logo", icon: Store },
@@ -33,9 +33,7 @@ const menu = [
 
 export default async function MorePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getUser();
   const { data: profile } = user
     ? await supabase.from("profiles").select("full_name, avatar_url").eq("id", user.id).single()
     : { data: null };

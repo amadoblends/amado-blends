@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getUser } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { ThemeProvider, type Theme } from "@/components/theme/theme-provider";
@@ -17,9 +18,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .eq("id", 1)
     .maybeSingle();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Shared with every page below via React cache — one verification per request
+  const user = await getUser();
 
   const [{ data: profile }, { data: business }] = await Promise.all([
     user

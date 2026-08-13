@@ -20,7 +20,8 @@ import type {
 } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
 
-const HOUR_H = 56; // week view is denser than the single-day timeline
+// Seven columns share the width, so the week rail is denser than the day's
+const HOUR_H = 56;
 const WEEK_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
@@ -90,6 +91,8 @@ export function WeekView({
   onSlotTap,
   onDraftTap,
   onSlotRejected,
+  onBlockTap,
+  onClosureTap,
 }: {
   date: Date;
   appointments: AppointmentRow[];
@@ -102,6 +105,10 @@ export function WeekView({
   onSlotTap: (dateStr: string, hhmm: string) => void;
   onDraftTap: () => void;
   onSlotRejected: (verdict: SlotVerdict) => void;
+  /** Tapping a blocked stretch opens it for editing or removal. */
+  onBlockTap?: (block: BlockedRange) => void;
+  /** Tapping a closed day's header opens the closure. */
+  onClosureTap?: (closure: ClosureRange) => void;
 }) {
   const days = eachDayOfInterval({
     start: startOfWeek(date, { weekStartsOn: 1 }),
@@ -145,12 +152,16 @@ export function WeekView({
                   >
                     {format(d, "d")}
                   </span>
-                  {closed && (
-                    <span className="text-[8px] font-bold text-danger uppercase truncate max-w-full px-1">
-                      {reasonLabel(closed.reason)}
-                    </span>
-                  )}
                 </Link>
+                {/* Sits outside the link so tapping it edits the closure */}
+                {closed && (
+                  <button
+                    onClick={() => onClosureTap?.(closed)}
+                    className="w-full text-[8px] font-bold text-danger uppercase truncate px-1 pb-1 active:opacity-60"
+                  >
+                    {reasonLabel(closed.reason)}
+                  </button>
+                )}
               </div>
             );
           })}
@@ -282,22 +293,23 @@ export function WeekView({
                   );
                 })}
 
-                {/* Blocked hours */}
+                {/* Blocked hours — tap to edit or remove */}
                 {dayBlocks.map((b) => {
                   const s = localMins(b.starts_at);
-                  const dur =
-                    (new Date(b.ends_at).getTime() - new Date(b.starts_at).getTime()) / 60000;
+                  const dur = durationMins(b.starts_at, b.ends_at);
                   return (
-                    <div
+                    <button
                       key={b.id}
-                      className="absolute left-0.5 right-0.5 rounded-md bg-border/60 flex items-center justify-center"
+                      onClick={() => onBlockTap?.(b)}
+                      aria-label={`Bloqueo ${fmtTime(s)} — tocar para editar`}
+                      className="absolute left-0.5 right-0.5 rounded-md bg-border/60 flex items-center justify-center z-[5]"
                       style={{
                         top: ((s - dayStart) / 60) * HOUR_H,
                         height: Math.max((dur / 60) * HOUR_H - 2, 14),
                       }}
                     >
                       <Lock size={9} className="text-muted" />
-                    </div>
+                    </button>
                   );
                 })}
 

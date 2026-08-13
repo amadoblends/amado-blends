@@ -1,13 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { getUser } from "@/lib/auth";
 import { getDashboardData } from "@/lib/data/dashboard";
 import { getDashboardLayout } from "@/lib/actions/dashboard";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getUser();
 
   const [{ data: profile }, data, { count: unreadCount }, layout] = await Promise.all([
     user

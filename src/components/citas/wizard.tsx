@@ -23,6 +23,7 @@ import { createAppointment } from "@/lib/actions/appointments";
 import { createClientRecord, searchClients } from "@/lib/actions/clients";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { toMins, fromMins, fmtHHMM as fmtSlot, dateAt } from "@/lib/time";
+import { shopDateAt } from "@/lib/timezone";
 import type { AvailabilityDay, BookingSettings } from "@/lib/data/availability";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -281,10 +282,9 @@ export function AppointmentWizard({
           return;
         }
 
-        // Build starts_at in local timezone so 9:00 AM stays 9:00 AM
-        const [y, mo, d] = data.date.split("-").map(Number);
-        const [h, mi] = data.time.split(":").map(Number);
-        const startsAt = new Date(y, mo - 1, d, h, mi, 0).toISOString();
+        // 9:00 AM means 9:00 AM *at the shop*, whatever timezone this device
+        // happens to be set to.
+        const startsAt = shopDateAt(data.date, data.time).toISOString();
 
         const fd = new FormData();
         fd.set("clientId", clientId);

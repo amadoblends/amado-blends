@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef, useTransition, useMemo } from
 import { useRouter } from "next/navigation";
 import { format, addDays, subDays } from "date-fns";
 import { es } from "date-fns/locale";
-import { Info } from "lucide-react";
+import { Info, Pencil, Rows2 } from "lucide-react";
 import { DayTimeline } from "./timeline";
 import { AppointmentWizard, type ServiceOption } from "./wizard";
 import { BlockHourQuick } from "./block-hour-quick";
@@ -15,6 +15,10 @@ import { AppointmentSheet } from "./appointment-sheet";
 import { RescheduleModal } from "./reschedule-modal";
 import { FullCalendarSheet } from "./full-calendar-sheet";
 import { SlotActionsCard, type SlotAction } from "./slot-actions-card";
+import { BlockDetailModal, type TimeOff } from "./block-detail-modal";
+import {
+  useDensity, HOUR_HEIGHT, DENSITIES, DENSITY_LABEL,
+} from "@/lib/calendar-density";
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
 import { Modal } from "@/components/ui/modal";
 import { reasonLabel } from "@/lib/closures";
@@ -79,6 +83,12 @@ export function CalendarShell({
   const [rescheduling, setRescheduling] = useState<AppointmentRow | null>(null);
   const [visibleMonth, setVisibleMonth] = useState<Date | undefined>(undefined);
   const [rejected, setRejected] = useState<SlotVerdict | null>(null);
+  // A block or closure opened from the calendar for editing / removal
+  const [timeOff, setTimeOff] = useState<TimeOff | null>(null);
+
+  // Purely visual: how many hours fit on screen
+  const [density, setDensity] = useDensity();
+  const hourH = HOUR_HEIGHT[density];
 
   /*
    * The selected day and view are mirrored locally so a tap paints
@@ -224,6 +234,14 @@ export function CalendarShell({
   const handleOpenPicker = useCallback(() => setPickerOpen(true), []);
   const handleSlotRejected = useCallback((v: SlotVerdict) => setRejected(v), []);
   const handleSelect = useCallback((a: AppointmentRow) => setSelected(a), []);
+  const handleBlockTap = useCallback(
+    (block: BlockedRange) => setTimeOff({ kind: "block", block }),
+    []
+  );
+  const handleClosureTap = useCallback(
+    (closure: ClosureRange) => setTimeOff({ kind: "closure", closure }),
+    []
+  );
 
   const todaysClosure = closureFor(date, closures);
 
@@ -270,18 +288,45 @@ export function CalendarShell({
       )}
 
       {/* Always visible, never inside a menu */}
-      <ViewSwitcher view={pendingView} onSetView={handleSetView} />
-
-      {todaysClosure && view === "day" && (
-        <div className="bg-danger-light rounded-2xl border border-danger/20 px-4 py-3">
-          <p className="text-sm font-bold text-danger">
-            Cerrado · {reasonLabel(todaysClosure.reason)}
-          </p>
-          <p className="text-xs text-muted mt-0.5">
-            {todaysClosure.description ||
-              `Del ${format(new Date(todaysClosure.starts_on + "T00:00:00"), "d MMM", { locale: es })} al ${format(new Date(todaysClosure.ends_on + "T00:00:00"), "d MMM", { locale: es })}`}
-          </p>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <ViewSwitcher view={pendingView} onSetView={handleSetView} />
         </div>
+        {/* Density cycles compact → normal → amplia; visual only */}
+        {pendingView === "day" && (
+          <button
+            onClick={() =>
+              setDensity(DENSITIES[(DENSITIES.indexOf(density) + 1) % DENSITIES.length])
+            }
+            title={`Densidad: ${DENSITY_LABEL[density]}`}
+            aria-label={`Densidad del calendario: ${DENSITY_LABEL[density]}`}
+            className="h-[52px] w-12 rounded-2xl bg-surface flex flex-col items-center justify-center gap-0.5 shrink-0 active:scale-95 transition-transform"
+          >
+            <Rows2 size={16} className="text-muted" />
+            <span className="text-[8px] font-bold text-muted uppercase leading-none">
+              {DENSITY_LABEL[density].slice(0, 4)}
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* Tap the banner to edit or lift the closure */}
+      {todaysClosure && view === "day" && (
+        <button
+          onClick={() => handleClosureTap(todaysClosure)}
+          className="w-full text-left bg-danger-light rounded-2xl border border-danger/20 px-4 py-3 flex items-center gap-3 active:scale-[0.99] transition-transform"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-danger">
+              Cerrado · {reasonLabel(todaysClosure.reason)}
+            </span>
+            <span className="block text-xs text-muted mt-0.5">
+              {todaysClosure.description ||
+                `Del ${format(new Date(todaysClosure.starts_on + "T00:00:00"), "d MMM", { locale: es })} al ${format(new Date(todaysClosure.ends_on + "T00:00:00"), "d MMM", { locale: es })}`}
+            </span>
+          </span>
+          <Pencil size={15} className="text-danger shrink-0" />
+        </button>
       )}
 
       {/*
@@ -304,10 +349,13 @@ export function CalendarShell({
               closure={todaysClosure}
               shortestServiceMins={shortestServiceMins}
               draft={draft}
+              hourH={hourH}
               onSelect={handleSelect}
               onSlotTap={handleSlotTap}
               onDraftTap={handleDraftTap}
               onSlotRejected={handleSlotRejected}
+              onBlockTap={handleBlockTap}
+              onClosureTap={handleClosureTap}
             />
           )}
 
@@ -323,6 +371,8 @@ export function CalendarShell({
               onSlotTap={handleSlotTap}
               onDraftTap={handleDraftTap}
               onSlotRejected={handleSlotRejected}
+              onBlockTap={handleBlockTap}
+              onClosureTap={handleClosureTap}
             />
           )}
 
@@ -340,6 +390,9 @@ export function CalendarShell({
           )}
         </div>
       </div>
+
+      {/* Edit or lift a block / closure straight from the calendar */}
+      <BlockDetailModal target={timeOff} onClose={() => setTimeOff(null)} />
 
       {/* Second tap on the placeholder */}
       <SlotActionsCard
