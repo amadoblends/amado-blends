@@ -3,7 +3,7 @@ import { HeaderSkeleton, StatsSkeleton, CardsSkeleton } from "@/components/ui/lo
 
 export default function ReportesLoading() {
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-4">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <HeaderSkeleton />
       <div className="flex gap-1.5">
         {Array.from({ length: 5 }).map((_, i) => (

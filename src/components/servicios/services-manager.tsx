@@ -41,7 +41,7 @@ export function ServicesManager({
   const singleNameById = new Map(singles.map((s) => [s.id, s.name]));
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center gap-3">
         {/*
           * This used to be a hardcoded link to /mas, so "back" always landed

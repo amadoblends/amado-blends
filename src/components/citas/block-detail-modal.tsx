@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { CLOSURE_REASONS, reasonLabel } from "@/lib/closures";
 import { createClient } from "@/lib/supabase/client";
 import { localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins } from "@/lib/time";
+import { shopDateAt, endOfShopDay } from "@/lib/timezone";
 import type { BlockedRange, ClosureRange } from "@/lib/data/appointments";
 
 /** Either kind of time-off, so one modal can present both. */
@@ -148,6 +149,9 @@ export function BlockDetailModal({
             description: description.trim() || null,
             starts_on: startDate,
             ends_on: endDate,
+            // The exact instant it stops — without this it never expires
+            starts_at: shopDateAt(startDate, "00:00").toISOString(),
+            ends_at: endOfShopDay(endDate).toISOString(),
             is_active: true,
           })
           .select("id")
@@ -170,6 +174,8 @@ export function BlockDetailModal({
             description: description.trim() || null,
             starts_on: startDate,
             ends_on: endDate,
+            starts_at: shopDateAt(startDate, "00:00").toISOString(),
+            ends_at: endOfShopDay(endDate).toISOString(),
           })
           .eq("id", carouselPostId);
       }

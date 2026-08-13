@@ -22,6 +22,12 @@ import {
 import { CAROUSEL_TYPES } from "@/lib/carousel-types";
 import { cn } from "@/lib/utils";
 
+import {
+  carouselStatus,
+  STATUS_LABEL,
+  type CarouselStatus,
+} from "@/lib/carousel-status";
+
 export interface CarouselPost {
   id: string;
   title: string;
@@ -32,28 +38,30 @@ export interface CarouselPost {
   button_href: string | null;
   starts_on: string | null;
   ends_on: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
   sort_order: number;
   is_active: boolean;
   is_draft: boolean;
+  is_permanent: boolean;
 }
 
-type Status = "borrador" | "programada" | "activa" | "pausada" | "finalizada";
-
-function statusOf(p: CarouselPost): Status {
-  if (p.is_draft) return "borrador";
-  if (!p.is_active) return "pausada";
-  const today = startOfDay(new Date());
-  if (p.ends_on && isBefore(new Date(p.ends_on + "T23:59:59"), today)) return "finalizada";
-  if (p.starts_on && isAfter(new Date(p.starts_on + "T00:00:00"), today)) return "programada";
-  return "activa";
-}
+/*
+ * Status comes from the shared module the client's carousel uses, so the
+ * barber's panel and the client can never disagree about what "finalizada"
+ * means. The old local copy read a post with no end date as permanently
+ * active — which is exactly how a finished vacation notice stayed on screen.
+ */
+type Status = CarouselStatus;
+const statusOf = (p: CarouselPost): Status => carouselStatus(p);
 
 const STATUS_STYLE: Record<Status, string> = {
-  borrador: "bg-border text-muted",
-  programada: "bg-info-light text-info",
-  activa: "bg-success-light text-success",
-  pausada: "bg-warning-light text-warning",
-  finalizada: "bg-border text-muted",
+  draft: "bg-border text-muted",
+  scheduled: "bg-info-light text-info",
+  active: "bg-success-light text-success",
+  paused: "bg-warning-light text-warning",
+  expired: "bg-border text-muted",
+  permanent: "bg-brand-light text-brand",
 };
 
 export function CarouselManager({
@@ -76,7 +84,7 @@ export function CarouselManager({
   }
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center gap-3">
         <BackButton />
         <div className="flex-1 min-w-0">
@@ -129,7 +137,7 @@ export function CarouselManager({
           {posts.map((p, i) => {
             const status = statusOf(p);
             const meta = CAROUSEL_TYPES.find((t) => t.value === p.type);
-            const dimmed = status === "finalizada" || status === "borrador";
+            const dimmed = status === "expired" || status === "draft";
 
             return (
               <div
@@ -177,7 +185,7 @@ export function CarouselManager({
                           STATUS_STYLE[status]
                         )}
                       >
-                        {status}
+                        {STATUS_LABEL[status].es}
                       </span>
                     </div>
                     <p className="text-xs text-muted">
@@ -186,16 +194,28 @@ export function CarouselManager({
                     {p.description && (
                       <p className="text-xs text-muted line-clamp-2 mt-0.5">{p.description}</p>
                     )}
-                    <p className="text-[11px] text-muted mt-1 flex items-center gap-1">
-                      <CalendarRange size={10} />
-                      {p.starts_on
-                        ? format(new Date(p.starts_on + "T00:00:00"), "d MMM", { locale: es })
-                        : "Desde ya"}
-                      {" → "}
-                      {p.ends_on
-                        ? format(new Date(p.ends_on + "T00:00:00"), "d MMM yyyy", { locale: es })
-                        : "sin fin"}
-                    </p>
+                    {p.is_permanent ? (
+                      <p className="text-[11px] text-brand mt-1 flex items-center gap-1">
+                        <CalendarRange size={10} />
+                        Contenido permanente · se muestra cuando no hay nada activo
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted mt-1 flex items-center gap-1">
+                        <CalendarRange size={10} />
+                        {p.starts_on
+                          ? format(new Date(p.starts_on + "T00:00:00"), "d MMM", { locale: es })
+                          : "Desde ya"}
+                        {" → "}
+                        {p.ends_on ? (
+                          format(new Date(p.ends_on + "T00:00:00"), "d MMM yyyy", { locale: es })
+                        ) : (
+                          // No end date is what kept finished notices on screen
+                          <span className="text-warning font-semibold">
+                            falta fecha de fin
+                          </span>
+                        )}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -282,6 +302,7 @@ function PostModal({
   const [imageUrl, setImageUrl] = useState<string | null>(post?.image_url ?? null);
   const [type, setType] = useState<string>(post?.type ?? "promocion");
   const [isActive, setIsActive] = useState(post?.is_active ?? true);
+  const [isPermanent, setIsPermanent] = useState(post?.is_permanent ?? false);
   const [title, setTitle] = useState(post?.title ?? "");
   const [description, setDescription] = useState(post?.description ?? "");
   const [buttonLabel, setButtonLabel] = useState(post?.button_label ?? "");
@@ -363,24 +384,53 @@ function PostModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Aparece desde">
-            <input
-              type="date"
-              name="startsOn"
-              defaultValue={post?.starts_on ?? ""}
-              className="form-input"
-            />
-          </Field>
-          <Field label="Deja de mostrarse">
-            <input
-              type="date"
-              name="endsOn"
-              defaultValue={post?.ends_on ?? ""}
-              className="form-input"
-            />
-          </Field>
-        </div>
+        {/*
+          * Permanent content has no window: it's the brand material that
+          * fills the carousel whenever nothing is running.
+          */}
+        <label className="flex items-center justify-between gap-3 bg-background rounded-xl border border-border px-4 py-3 cursor-pointer">
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-foreground">
+              Contenido permanente
+            </span>
+            <span className="block text-xs text-muted mt-0.5">
+              Se muestra solo cuando no hay ninguna promoción o aviso activo.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            name="isPermanent"
+            checked={isPermanent}
+            onChange={(e) => setIsPermanent(e.target.checked)}
+            className="w-5 h-5 accent-[var(--color-brand)] shrink-0"
+          />
+        </label>
+
+        {!isPermanent && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Aparece desde">
+              <input
+                type="date"
+                name="startsOn"
+                defaultValue={post?.starts_on ?? ""}
+                className="form-input"
+              />
+            </Field>
+            <Field label="Deja de mostrarse">
+              <input
+                type="date"
+                name="endsOn"
+                required
+                defaultValue={post?.ends_on ?? ""}
+                className="form-input"
+              />
+              {/* Required on purpose: a post with no end never stopped showing */}
+              <span className="text-[11px] text-muted mt-1 block">
+                Obligatoria. Al llegar esta fecha desaparece sola del carrusel.
+              </span>
+            </Field>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Texto del botón">

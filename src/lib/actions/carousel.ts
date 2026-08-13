@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/actions/appointments";
 import { CAROUSEL_TYPE_VALUES } from "@/lib/carousel-types";
+import { shopDateAt, endOfShopDay } from "@/lib/timezone";
 
 const postSchema = z.object({
   title: z.string().trim().min(2).max(120),
@@ -18,6 +19,7 @@ const postSchema = z.object({
   sortOrder: z.coerce.number().int().min(0).max(999).default(0),
   isActive: z.enum(["true", "false"]).default("true"),
   isDraft: z.enum(["true", "false"]).default("false"),
+  isPermanent: z.enum(["true", "false", "on"]).default("false"),
 });
 
 export async function upsertCarouselPost(
@@ -40,13 +42,30 @@ export async function upsertCarouselPost(
     sortOrder: formData.get("sortOrder") || 0,
     isActive: formData.get("isActive") || "true",
     isDraft: formData.get("isDraft") || "false",
+    // An unchecked checkbox sends nothing at all
+    isPermanent: formData.get("isPermanent") || "false",
   });
 
   if (!parsed.success) {
     return { ok: false, error: "Revisa el título y los datos de la publicación." };
   }
+
+  const permanent = parsed.data.isPermanent !== "false";
+
   if (parsed.data.startsOn && parsed.data.endsOn && parsed.data.startsOn > parsed.data.endsOn) {
     return { ok: false, error: "La fecha de fin debe ser posterior a la de inicio." };
+  }
+  /*
+   * A post with no end date never stopped showing — that's how a finished
+   * vacation notice stayed in the client's carousel. Permanent content is the
+   * only kind allowed to run without an end.
+   */
+  if (!permanent && !parsed.data.endsOn) {
+    return {
+      ok: false,
+      error:
+        "Pon una fecha de fin, o márcala como contenido permanente. Sin fecha de fin nunca dejaría de mostrarse.",
+    };
   }
 
   const payload = {
@@ -56,8 +75,23 @@ export async function upsertCarouselPost(
     type: parsed.data.type,
     button_label: parsed.data.buttonLabel || null,
     button_href: parsed.data.buttonHref || null,
-    starts_on: parsed.data.startsOn || null,
-    ends_on: parsed.data.endsOn || null,
+    starts_on: permanent ? null : parsed.data.startsOn || null,
+    ends_on: permanent ? null : parsed.data.endsOn || null,
+    /*
+     * The exact instants are what the client actually checks, so it can drop
+     * a post the moment it expires instead of at the next UTC midnight.
+     * ends_at is the *end* of the chosen day in the shop's timezone, which is
+     * how "deja de mostrarse el 6 de agosto" reads to a person.
+     */
+    starts_at:
+      permanent || !parsed.data.startsOn
+        ? null
+        : shopDateAt(parsed.data.startsOn, "00:00").toISOString(),
+    ends_at:
+      permanent || !parsed.data.endsOn
+        ? null
+        : endOfShopDay(parsed.data.endsOn).toISOString(),
+    is_permanent: permanent,
     sort_order: parsed.data.sortOrder,
     is_active: parsed.data.isActive === "true",
     is_draft: parsed.data.isDraft === "true",

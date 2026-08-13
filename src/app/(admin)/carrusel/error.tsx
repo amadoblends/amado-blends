@@ -16,7 +16,7 @@ export default function CarruselError({
   }, [error]);
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6">
       <div className="bg-surface rounded-2xl border border-border p-6 space-y-4 text-center">
         <div className="w-14 h-14 rounded-full bg-danger-light flex items-center justify-center mx-auto">
           <AlertTriangle size={24} className="text-danger" />

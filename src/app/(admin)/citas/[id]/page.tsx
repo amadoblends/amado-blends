@@ -63,7 +63,7 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
   const service = appointment.services as unknown as { name: string; color: string };
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center gap-3">
         <BackButton />
         <h1 className="text-xl font-bold text-foreground">Detalle de la cita</h1>

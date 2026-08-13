@@ -7,7 +7,7 @@ export default async function BookingConfigPage() {
   const settings = await getBookingSettings();
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center gap-3">
         <Link
           href="/disponibilidad"

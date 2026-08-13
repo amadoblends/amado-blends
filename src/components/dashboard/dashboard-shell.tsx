@@ -28,7 +28,7 @@ export function DashboardShell({
   const [photoOpen, setPhotoOpen] = useState(false);
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       {/* Profile card — dark surface, no border, actions on the right */}
       <header className="rounded-3xl bg-[#15171c] px-4 py-4 sm:px-5 sm:py-5 flex items-center gap-4">
         <button

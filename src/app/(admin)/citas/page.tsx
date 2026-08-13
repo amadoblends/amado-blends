@@ -104,7 +104,7 @@ export default async function CitasPage({
     availability.find((d) => d.weekday === date.getDay() && d.is_active) ?? null;
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-3">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-3">
       <CalendarShell
         view={view}
         date={date}

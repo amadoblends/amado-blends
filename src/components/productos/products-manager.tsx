@@ -34,7 +34,7 @@ export function ProductsManager({ products }: { products: ProductData[] }) {
   }
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-4">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/mas" className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">

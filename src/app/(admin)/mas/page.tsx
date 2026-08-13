@@ -7,6 +7,7 @@ import { ThemePicker } from "@/components/theme/theme-picker";
 import Link from "next/link";
 import {
   Package,
+  Scissors,
   Images,
   Store,
   LogOut,
@@ -23,7 +24,12 @@ const menu = [
   { href: "/perfil", label: "Mi perfil", icon: UserCircle },
   { href: "/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/productos", label: "Productos e inventario", icon: Package },
-  // Servicios lives on the dashboard's quick actions — no duplicate entry here
+  /*
+   * "Más" is the navigation on phones, where there is no sidebar — so
+   * Servicios belongs here. It is the desktop sidebar that shouldn't repeat
+   * it, and that's handled there rather than by removing the entry.
+   */
+  { href: "/servicios", label: "Servicios", icon: Scissors },
   { href: "/promociones", label: "Promociones", icon: BadgePercent },
   { href: "/carrusel", label: "Carrusel del cliente", icon: Images },
   { href: "/negocio", label: "Negocio y logo", icon: Store },
@@ -39,7 +45,7 @@ export default async function MorePage() {
     : { data: null };
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-6">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center gap-3">
         <BackButton />
         <h1 className="text-xl font-bold text-foreground">Más</h1>

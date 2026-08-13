@@ -13,6 +13,7 @@ import {
   buildReturnTitle,
   buildReturnDescription,
 } from "@/lib/closures";
+import { shopDateAt, endOfShopDay } from "@/lib/timezone";
 
 export interface ConflictingAppointment {
   id: string;
@@ -157,6 +158,9 @@ export async function createClosure(formData: FormData): Promise<ActionResult> {
         type: d.reason === "vacaciones" ? "vacaciones" : "cerrado",
         starts_on: null, // visible from today so clients see it coming
         ends_on: d.endsOn,
+        // The exact instant it stops. Without this the notice never expired.
+        starts_at: null,
+        ends_at: endOfShopDay(d.endsOn).toISOString(),
         is_active: true,
         is_draft: d.announce === "borrador",
         sort_order: 0,
@@ -189,6 +193,8 @@ export async function createClosure(formData: FormData): Promise<ActionResult> {
           type: "aviso",
           starts_on: d.endsOn,
           ends_on: format(back, "yyyy-MM-dd"),
+          starts_at: shopDateAt(d.endsOn, "00:00").toISOString(),
+          ends_at: endOfShopDay(format(back, "yyyy-MM-dd")).toISOString(),
           button_label: "Reservar",
           button_href: "/reservar",
           is_active: true,

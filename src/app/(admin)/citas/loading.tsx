@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export default function CitasLoading() {
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-3">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-3">
       {/* Header */}
       <div className="flex items-center gap-1.5">
         <Skeleton className="w-10 h-10 rounded-xl" />

@@ -33,7 +33,7 @@ export default async function ClientsPage({
   const { clients, counts } = await getClientsWithSegments(filter, params.q);
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-4">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <BackButton />

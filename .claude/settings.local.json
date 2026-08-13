@@ -76,7 +76,8 @@
       "Bash(cp \"mi proyecto de barbaria/src/lib/timezone.ts\" \"amadoblendsbooking/src/lib/timezone.ts\")",
       "Bash(grep -rn 'href=\"/servicios\"\\\\|href={`/servicios' src/)",
       "Bash(perl -0pi -e 's/ Package,\\\\n\\\\n Images,/ Package,\\\\n Images,/' src/app/\\\\\\(admin\\\\\\)/mas/page.tsx)",
-      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(JSON.stringify\\({...p.dependencies},null,1\\)\\)\")"
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(JSON.stringify\\({...p.dependencies},null,1\\)\\)\")",
+      "Bash(sed -i 's|import { localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins } from \"@/lib/time\";|import { localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins } from \"@/lib/time\";\\\\nimport { shopDateAt, endOfShopDay } from \"@/lib/timezone\";|' src/components/citas/block-detail-modal.tsx)"
     ]
   }
 }

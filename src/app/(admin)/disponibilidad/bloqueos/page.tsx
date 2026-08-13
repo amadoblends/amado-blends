@@ -34,7 +34,7 @@ export default async function BloqueosPage({
     availability.find((d) => d.weekday === date.getDay() && d.is_active) ?? null;
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center gap-3">
         <BackButton />
         <div className="min-w-0">

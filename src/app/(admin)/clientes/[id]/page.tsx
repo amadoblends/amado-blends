@@ -46,7 +46,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
     .sort((a, b) => b.count - a.count);
 
   return (
-    <div className="px-4 pt-[max(16px,var(--safe-top))] pb-6 space-y-5">
+    <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
       <header className="flex items-center justify-between">
         <BackButton />
         <Link href={`/clientes/${id}/editar`} className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">

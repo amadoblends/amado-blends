@@ -28,6 +28,12 @@ import { signOut } from "@/lib/actions/auth";
 import { SearchModal, useSearchHotkey } from "@/components/search-modal";
 import { useTheme } from "@/components/theme/theme-provider";
 
+/*
+ * The desktop / tablet sidebar. Servicios is deliberately absent: on wide
+ * screens it is reached from the dashboard's quick actions, and repeating it
+ * here made two permanent entry points for the same screen. Phones have no
+ * sidebar, so there it stays in "Más".
+ */
 const links = [
   { href: "/", label: "Inicio", icon: Home },
   { href: "/citas", label: "Citas", icon: Calendar },
@@ -35,7 +41,6 @@ const links = [
   { href: "/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/productos", label: "Productos", icon: Package },
-  { href: "/servicios", label: "Servicios", icon: Scissors },
   { href: "/promociones", label: "Promociones", icon: BadgePercent },
   { href: "/carrusel", label: "Carrusel", icon: Images },
   { href: "/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
