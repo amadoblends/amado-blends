@@ -26,9 +26,13 @@ export function usePinchZoom({
   const pinch = useRef<{
     startDistance: number;
     startHourH: number;
-    /** Minutes-from-top under the midpoint when the gesture began. */
-    anchorOffsetPx: number;
+    /** Distance from the rail's top to the pinch midpoint, in *hours*. */
+    anchorHours: number;
+    /** Where on the screen that point was, and must stay. */
     anchorViewportY: number;
+    /** Page offset of the rail's top, measured once. */
+    railPageTop: number;
+    frame: number;
   } | null>(null);
 
   const [pinching, setPinching] = useState(false);
@@ -48,8 +52,12 @@ export function usePinchZoom({
       pinch.current = {
         startDistance: distance(e.touches),
         startHourH: hourH,
-        anchorOffsetPx: midY - rect.top,
+        // Held in hours, not pixels: the whole point is that it survives a
+        // change of scale.
+        anchorHours: (midY - rect.top) / hourH,
         anchorViewportY: midY,
+        railPageTop: rect.top + window.scrollY,
+        frame: 0,
       };
       setPinching(true);
       haptic(6);
@@ -61,25 +69,38 @@ export function usePinchZoom({
     (e: React.TouchEvent) => {
       const p = pinch.current;
       if (!p || e.touches.length !== 2) return;
-      // Stop the page from scrolling or Safari from zooming the whole document
+      // Stop the page scrolling, and Safari zooming the whole document
       e.preventDefault();
 
       const ratio = distance(e.touches) / p.startDistance;
       const next = Math.min(MAX_HOUR_H, Math.max(MIN_HOUR_H, p.startHourH * ratio));
-      if (Math.abs(next - p.startHourH) < 1) return;
 
-      onZoom(next);
+      /*
+       * The scroll correction is computed as an ABSOLUTE target, not a delta.
+       *
+       * Nudging with scrollBy on every touchmove was the source of the
+       * jitter: each frame's rounding error accumulated, and any scroll the
+       * browser applied in between was counted twice, so the content drifted
+       * and fought the fingers. Working out where the anchored hour *should*
+       * be and going straight there is self-correcting — every frame starts
+       * from the truth rather than from the last guess.
+       */
+      const target = p.railPageTop + p.anchorHours * next - p.anchorViewportY;
 
-      // Keep the pinched moment under the fingers by absorbing the growth
-      // into the page scroll.
-      const grownBy = (p.anchorOffsetPx / p.startHourH) * next - p.anchorOffsetPx;
-      if (Math.abs(grownBy) > 0.5) window.scrollBy(0, grownBy);
+      // One update per frame; touchmove fires far more often than that
+      if (p.frame) cancelAnimationFrame(p.frame);
+      p.frame = requestAnimationFrame(() => {
+        onZoom(next);
+        window.scrollTo(0, Math.max(0, target));
+        if (pinch.current) pinch.current.frame = 0;
+      });
     },
     [onZoom]
   );
 
   const onTouchEnd = useCallback((e: React.TouchEvent) => {
     if (e.touches.length < 2 && pinch.current) {
+      if (pinch.current.frame) cancelAnimationFrame(pinch.current.frame);
       pinch.current = null;
       setPinching(false);
     }

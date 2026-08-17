@@ -24,11 +24,14 @@ const BLOCK_GAP = 3;
 const TIGHT_H = 52;
 
 /**
- * The rail covers the whole day, not just working hours, so any hour can be
- * scrolled to. Working hours are the highlighted band inside it.
+ * How much of the day is drawn either side of working hours.
+ *
+ * A full 24-hour rail was tried and removed: it buried the working day in
+ * empty space and made every scroll longer for nothing. One hour of margin is
+ * enough to see an early or late appointment that falls outside the schedule
+ * without turning the day into a corridor.
  */
-const RAIL_START = 0;
-const RAIL_END = 24 * 60;
+const RAIL_MARGIN_MIN = 60;
 
 const STATUS_LABEL: Record<string, string> = {
   confirmada: "Confirmada",
@@ -223,35 +226,19 @@ function DayTimelineBase({
   const railRef = useRef<HTMLDivElement>(null);
 
   /*
-   * The rail is 24 hours tall, so landing at midnight would hide the whole
-   * working day. Scroll to just above opening time once, per day.
+   * No auto-scroll: the rail starts an hour before opening, so the working
+   * day is already near the top. Moving the page on load would only fight
+   * whatever the barber was looking at.
    */
-  const scrolledFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!dayAvail?.is_active || scrolledFor.current === dateStr) return;
-    const el = railRef.current;
-    if (!el) return;
-    scrolledFor.current = dateStr;
-
-    const openMins = toMins(dayAvail.start_time);
-    const target =
-      el.getBoundingClientRect().top +
-      window.scrollY +
-      (openMins / 60) * hourH -
-      // A little of the previous hour for context
-      Math.min(40, hourH / 2);
-    window.scrollTo({ top: Math.max(0, target), behavior: "auto" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateStr, dayAvail?.is_active]);
 
   /*
-   * The rail always spans the whole day so the barber can scroll to any hour,
-   * but the hours they actually work are the lit band. Everything outside is
-   * dimmed and refuses a booking — checkSlot already answers "outside-hours",
-   * so this is presentation over a rule that was already there.
+   * The rail covers the hours actually worked that weekday, plus a little
+   * margin. Monday 9–6 and Tuesday 10–7 draw different rails; a closed day
+   * draws none.
    *
-   * The working window comes from the weekday's own row, so Monday 9–6 and
-   * Tuesday 10–7 each render their own band.
+   * The margin also has to stretch to hold anything already booked outside
+   * the schedule — an appointment moved to 8am on a day that opens at 9 must
+   * still be visible rather than clipped off the top.
    */
   const workStart = dayAvail?.is_active ? toMins(dayAvail.start_time) : null;
   const workEnd = dayAvail?.is_active ? toMins(dayAvail.end_time) : null;
@@ -259,14 +246,41 @@ function DayTimelineBase({
   const breakEnd = dayAvail?.break_end_time ? toMins(dayAvail.break_end_time) : null;
   const step = dayAvail?.slot_minutes || 30;
 
-  const dayStart = RAIL_START;
-  const dayEnd = RAIL_END;
+  const occupied = [
+    ...appointments.map((a) => ({
+      s: localMins(a.starts_at),
+      e: localMins(a.starts_at) + durationMins(a.starts_at, a.ends_at),
+    })),
+    ...blocked.map((b) => ({
+      s: localMins(b.starts_at),
+      e: localMins(b.starts_at) + durationMins(b.starts_at, b.ends_at),
+    })),
+  ];
+
+  const earliest = occupied.length ? Math.min(...occupied.map((o) => o.s)) : null;
+  const latest = occupied.length ? Math.max(...occupied.map((o) => o.e)) : null;
+
+  const dayStart = Math.max(
+    0,
+    Math.min(
+      (workStart ?? 9 * 60) - RAIL_MARGIN_MIN,
+      earliest !== null ? earliest - 30 : Number.POSITIVE_INFINITY
+    )
+  );
+  const dayEnd = Math.min(
+    24 * 60,
+    Math.max(
+      (workEnd ?? 18 * 60) + RAIL_MARGIN_MIN,
+      latest !== null ? latest + 30 : 0
+    )
+  );
+
   const totalH = ((dayEnd - dayStart) / 60) * hourH;
   /** Minutes → pixels, the one conversion the whole view is built on. */
   const y = (mins: number) => ((mins - dayStart) / 60) * hourH;
 
   const hours: number[] = [];
-  for (let t = dayStart; t <= dayEnd; t += 60) hours.push(t);
+  for (let t = Math.ceil(dayStart / 60) * 60; t <= dayEnd; t += 60) hours.push(t);
 
   const busyApts = appointments.map((a) => ({
     start: localMins(a.starts_at),
@@ -364,6 +378,18 @@ function DayTimelineBase({
   );
 
   const working = workStart !== null && workEnd !== null;
+
+  /*
+   * A closed day with nothing booked has no rail to draw. Say so plainly
+   * rather than render an empty grid with no hours in it.
+   */
+  if (!working && occupied.length === 0) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted">Día no laborable. Cámbialo en Disponibilidad.</p>
+      </div>
+    );
+  }
 
   return (
     <div>

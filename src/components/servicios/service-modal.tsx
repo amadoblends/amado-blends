@@ -1,20 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Wind, Droplet } from "lucide-react";
+
 import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { ImageUploader } from "@/components/ui/image-uploader";
 import { upsertService, deleteService } from "@/lib/actions/products";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_CATEGORIES,
+  categoryLabel,
+  categoryEmoji,
+} from "@/lib/product-categories";
 import type { ServiceKind } from "@/lib/supabase/types";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export interface ProductOption {
   id: string;
   name: string;
-  category: "dry" | "wet" | null;
+  /** Any id from product_categories — see lib/product-categories. */
+  category: string | null;
 }
 
 export interface ServiceData {
@@ -72,9 +78,19 @@ export function ServiceModal({
   );
 
   const kind: ServiceKind = service?.kind ?? initialKind;
-  const dryProducts = availableProducts.filter((p) => p.category === "dry");
-  const wetProducts = availableProducts.filter((p) => p.category === "wet");
-  const otherProducts = availableProducts.filter((p) => !p.category);
+  /** Bucketed by category, in the catalogue's own order, unknowns last. */
+  const groupedProducts = useMemo(() => {
+    const map = new Map<string, ProductOption[]>();
+    for (const p of availableProducts) {
+      const key = p.category ?? "other";
+      const list = map.get(key) ?? [];
+      list.push(p);
+      map.set(key, list);
+    }
+    const order = DEFAULT_CATEGORIES.map((c) => c.id);
+    const rank = (id: string) => (order.indexOf(id) === -1 ? 999 : order.indexOf(id));
+    return [...map.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
+  }, [availableProducts]);
 
   function toggleProduct(id: string) {
     setSelectedProducts((prev) => {
@@ -200,27 +216,23 @@ export function ServiceModal({
             <p className="text-xs text-muted mb-2">
               El cliente podrá elegir cuáles quiere que uses durante su cita.
             </p>
+            {/*
+              * Grouped by whatever categories the products actually carry.
+              * This used to filter for the hardcoded "dry" / "wet" / no
+              * category — once categories became Pelo, Barba, Tinte and the
+              * rest, all three buckets came out empty and the whole picker
+              * rendered blank.
+              */}
             <div className="space-y-3 max-h-56 overflow-y-auto border border-border rounded-xl p-3">
-              <ProductGroup
-                title="Secos"
-                icon={<Wind size={12} />}
-                products={dryProducts}
-                selected={selectedProducts}
-                onToggle={toggleProduct}
-              />
-              <ProductGroup
-                title="Húmedos"
-                icon={<Droplet size={12} />}
-                products={wetProducts}
-                selected={selectedProducts}
-                onToggle={toggleProduct}
-              />
-              <ProductGroup
-                title="Sin categoría"
-                products={otherProducts}
-                selected={selectedProducts}
-                onToggle={toggleProduct}
-              />
+              {groupedProducts.map(([categoryId, items]) => (
+                <ProductGroup
+                  key={categoryId}
+                  title={`${categoryEmoji(categoryId)} ${categoryLabel(categoryId)}`}
+                  products={items}
+                  selected={selectedProducts}
+                  onToggle={toggleProduct}
+                />
+              ))}
             </div>
             {selectedProducts.size > 0 && (
               <p className="text-xs text-brand font-semibold mt-1.5">
