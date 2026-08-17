@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo, memo } from "react";
+import { useState, useEffect, useMemo, useRef, memo } from "react";
 import Image from "next/image";
 import { Lock, Plus, X } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { displayAppointmentName } from "@/lib/guests";
 import { PhotoLightbox } from "@/components/ui/photo-lightbox";
 import { checkSlot, type SlotVerdict } from "@/lib/slot-availability";
+import { usePinchZoom, useAppointmentDrag } from "./use-calendar-gestures";
 import {
   toMins, fromMins, localMins, localDateStr, fmtMins, durationMins, todayStr,
 } from "@/lib/time";
@@ -21,6 +22,13 @@ import type { AvailabilityDay } from "@/lib/data/availability";
 const BLOCK_GAP = 3;
 /** Below this a card can't fit an avatar and two lines, so it goes one-line. */
 const TIGHT_H = 52;
+
+/**
+ * The rail covers the whole day, not just working hours, so any hour can be
+ * scrolled to. Working hours are the highlighted band inside it.
+ */
+const RAIL_START = 0;
+const RAIL_END = 24 * 60;
 
 const STATUS_LABEL: Record<string, string> = {
   confirmada: "Confirmada",
@@ -158,6 +166,9 @@ function DayTimelineBase({
   shortestServiceMins,
   draft,
   hourH,
+  onZoomChange,
+  snapMinutes,
+  onMoveAppointment,
   onSelect,
   onSlotTap,
   onDraftTap,
@@ -172,8 +183,14 @@ function DayTimelineBase({
   blockedTimes?: BlockedRange[];
   closure?: ClosureRange | null;
   shortestServiceMins: number;
-  /** Pixels per hour — set by the density preference. */
+  /** Pixels per hour — set by the density preference and by pinching. */
   hourH: number;
+  /** Pinch reports its new scale here. */
+  onZoomChange?: (next: number) => void;
+  /** How far a dragged appointment snaps, in minutes. */
+  snapMinutes: number;
+  /** A card was dragged to a new, already-validated time. */
+  onMoveAppointment?: (appointmentId: string, hhmm: string) => void;
   /** The pencilled-in slot waiting for a second tap. */
   draft: { date: string; time: string } | null;
   onSelect?: (a: AppointmentRow) => void;
@@ -203,26 +220,53 @@ function DayTimelineBase({
   );
 
   const nowMins = useNowMins(dateStr === todayStr());
+  const railRef = useRef<HTMLDivElement>(null);
 
-  if (!dayAvail?.is_active) {
-    return (
-      <div className="py-16 text-center">
-        <p className="text-sm text-muted">Día no laborable. Cámbialo en Disponibilidad.</p>
-      </div>
-    );
-  }
+  /*
+   * The rail is 24 hours tall, so landing at midnight would hide the whole
+   * working day. Scroll to just above opening time once, per day.
+   */
+  const scrolledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!dayAvail?.is_active || scrolledFor.current === dateStr) return;
+    const el = railRef.current;
+    if (!el) return;
+    scrolledFor.current = dateStr;
 
-  const dayStart = toMins(dayAvail.start_time);
-  const dayEnd = toMins(dayAvail.end_time);
-  const breakStart = dayAvail.break_start_time ? toMins(dayAvail.break_start_time) : null;
-  const breakEnd = dayAvail.break_end_time ? toMins(dayAvail.break_end_time) : null;
-  const step = dayAvail.slot_minutes || 30;
+    const openMins = toMins(dayAvail.start_time);
+    const target =
+      el.getBoundingClientRect().top +
+      window.scrollY +
+      (openMins / 60) * hourH -
+      // A little of the previous hour for context
+      Math.min(40, hourH / 2);
+    window.scrollTo({ top: Math.max(0, target), behavior: "auto" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateStr, dayAvail?.is_active]);
+
+  /*
+   * The rail always spans the whole day so the barber can scroll to any hour,
+   * but the hours they actually work are the lit band. Everything outside is
+   * dimmed and refuses a booking — checkSlot already answers "outside-hours",
+   * so this is presentation over a rule that was already there.
+   *
+   * The working window comes from the weekday's own row, so Monday 9–6 and
+   * Tuesday 10–7 each render their own band.
+   */
+  const workStart = dayAvail?.is_active ? toMins(dayAvail.start_time) : null;
+  const workEnd = dayAvail?.is_active ? toMins(dayAvail.end_time) : null;
+  const breakStart = dayAvail?.break_start_time ? toMins(dayAvail.break_start_time) : null;
+  const breakEnd = dayAvail?.break_end_time ? toMins(dayAvail.break_end_time) : null;
+  const step = dayAvail?.slot_minutes || 30;
+
+  const dayStart = RAIL_START;
+  const dayEnd = RAIL_END;
   const totalH = ((dayEnd - dayStart) / 60) * hourH;
   /** Minutes → pixels, the one conversion the whole view is built on. */
   const y = (mins: number) => ((mins - dayStart) / 60) * hourH;
 
   const hours: number[] = [];
-  for (let t = Math.ceil(dayStart / 60) * 60; t <= dayEnd; t += 60) hours.push(t);
+  for (let t = dayStart; t <= dayEnd; t += 60) hours.push(t);
 
   const busyApts = appointments.map((a) => ({
     start: localMins(a.starts_at),
@@ -235,29 +279,81 @@ function DayTimelineBase({
     label: b.reason ?? undefined,
   }));
 
-  const ctxFor = (slotMins: number) => ({
+  // Availability is judged against the *working* window, never the rail
+  const ctxFor = (slotMins: number, durationOverride?: number) => ({
     dateStr,
     slotMins,
-    hours: {
-      startMins: dayStart,
-      endMins: dayEnd,
-      breakStartMins: breakStart,
-      breakEndMins: breakEnd,
-    },
+    hours:
+      workStart !== null && workEnd !== null
+        ? {
+            startMins: workStart,
+            endMins: workEnd,
+            breakStartMins: breakStart,
+            breakEndMins: breakEnd,
+          }
+        : null,
     closure: closure ? { reason: closure.reason, description: closure.description } : null,
     appointments: busyApts,
     blocked: busyBlocks,
-    shortestServiceMins,
+    shortestServiceMins: durationOverride ?? shortestServiceMins,
   });
 
+  // Only the worked hours are tappable; the rest are dimmed, not interactive
   const slots: number[] = [];
-  for (let t = dayStart; t + step <= dayEnd; t += step) slots.push(t);
+  if (workStart !== null && workEnd !== null) {
+    for (let t = workStart; t + step <= workEnd; t += step) slots.push(t);
+  }
 
   function handleSlot(slotMins: number) {
     const verdict = checkSlot(ctxFor(slotMins));
     if (verdict.ok) onSlotTap?.(dateStr, fromMins(slotMins));
     else onSlotRejected?.(verdict);
   }
+
+  /**
+   * Whether a dragged appointment may land at these minutes.
+   *
+   * Its own current slot is excluded from the busy list — an appointment
+   * always overlaps itself, and that shouldn't read as a conflict.
+   */
+  function canLandAt(startMins: number, durMins: number, appointmentId: string) {
+    const others = appointments.filter((a) => a.id !== appointmentId);
+    const verdict = checkSlot({
+      ...ctxFor(startMins, durMins),
+      appointments: others.map((a) => ({
+        start: localMins(a.starts_at),
+        end: localMins(a.starts_at) + durationMins(a.starts_at, a.ends_at),
+        label: a.guest_name ?? a.client.full_name,
+      })),
+    });
+    if (!verdict.ok) return { ok: false, reason: verdict.title };
+    // The whole service has to fit before closing time
+    if (workEnd !== null && startMins + durMins > workEnd) {
+      return { ok: false, reason: "No cabe antes de cerrar" };
+    }
+    return { ok: true };
+  }
+
+  // ── Gestures ─────────────────────────────────────────────────────────────
+  const pinchHandlers = usePinchZoom({
+    hourH,
+    onZoom: onZoomChange ?? (() => {}),
+    containerRef: railRef,
+  });
+  const pinching = pinchHandlers.pinching;
+
+  const {
+    drag,
+    onTouchStart: onCardTouchStart,
+    ...dragHandlers
+  } = useAppointmentDrag({
+    hourH,
+    dayStartMins: workStart ?? 0,
+    snapMinutes,
+    containerRef: railRef,
+    validate: canLandAt,
+    onDrop: (id, startMins) => onMoveAppointment?.(id, fromMins(startMins)),
+  });
 
   const draftMins =
     draft && draft.date === dateStr ? toMins(draft.time) : null;
@@ -267,32 +363,85 @@ function DayTimelineBase({
     (a, b) => localMins(a.starts_at) - localMins(b.starts_at)
   );
 
+  const working = workStart !== null && workEnd !== null;
+
   return (
     <div>
-      <div className="relative flex">
+      <div
+        ref={railRef}
+        className="relative flex"
+        // Vertical panning stays with the browser; two fingers are ours
+        style={{ touchAction: pinching || drag ? "none" : "pan-y" }}
+        // A drag starts on the card itself; the container only follows it
+        onTouchStart={pinchHandlers.onTouchStart}
+        onTouchMove={(e) => {
+          pinchHandlers.onTouchMove(e);
+          dragHandlers.onTouchMove(e);
+        }}
+        onTouchEnd={(e) => {
+          pinchHandlers.onTouchEnd(e);
+          dragHandlers.onTouchEnd();
+        }}
+        onTouchCancel={() => {
+          dragHandlers.cancelPress();
+        }}
+      >
         {/* Hour rail — the only thing that expresses real duration */}
         <div className="w-[54px] shrink-0 relative" style={{ height: totalH + 16 }}>
-          {hours.map((t) => (
-            <div
-              key={t}
-              className="absolute right-2.5 text-[10px] font-semibold text-muted leading-none tnum"
-              style={{ top: y(t) - 4 }}
-            >
-              {fmtMins(t)}
-            </div>
-          ))}
+          {hours.map((t) => {
+            const inWork = working && t >= workStart! && t <= workEnd!;
+            return (
+              <div
+                key={t}
+                className={cn(
+                  "absolute right-2.5 text-[10px] leading-none tnum",
+                  inWork ? "font-bold text-foreground" : "font-medium text-muted/40"
+                )}
+                style={{ top: y(t) - 4 }}
+              >
+                {fmtMins(t)}
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex-1 relative min-w-0" style={{ height: totalH + 16 }}>
-          {hours.map((t) => (
-            <div
-              key={t}
-              className="absolute left-0 right-0 h-px bg-border"
-              style={{ top: y(t) }}
-            />
-          ))}
+          {/* Hours outside the working window read as unavailable */}
+          {working ? (
+            <>
+              <div
+                className="absolute left-0 right-0 rounded-t-xl bg-foreground/[0.04]"
+                style={{ top: 0, height: y(workStart!) }}
+              />
+              <div
+                className="absolute left-0 right-0 rounded-b-xl bg-foreground/[0.04]"
+                style={{ top: y(workEnd!), height: totalH - y(workEnd!) + 16 }}
+              />
+              {/* The lit band: the hours actually worked this weekday */}
+              <div
+                className="absolute left-0 right-0 border-y border-border/70"
+                style={{ top: y(workStart!), height: y(workEnd!) - y(workStart!) }}
+              />
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-foreground/[0.04] rounded-xl" />
+          )}
 
-          {/* Tap targets underneath everything else */}
+          {hours.map((t) => {
+            const inWork = working && t >= workStart! && t < workEnd!;
+            return (
+              <div
+                key={t}
+                className={cn(
+                  "absolute left-0 right-0 h-px",
+                  inWork ? "bg-border" : "bg-border/40"
+                )}
+                style={{ top: y(t) }}
+              />
+            );
+          })}
+
+          {/* Tap targets underneath everything else, working hours only */}
           {slots.map((t) => (
             <button
               key={t}
@@ -401,6 +550,7 @@ function DayTimelineBase({
 
             // Grey by default, orange for confirmed and in-progress work
             const warm = a.status === "confirmada" || running;
+            const beingDragged = drag?.appointmentId === a.id;
 
             const name = displayAppointmentName(
               a.client.full_name,
@@ -411,15 +561,22 @@ function DayTimelineBase({
             return (
               <button
                 key={a.id}
-                onClick={() => onSelect?.(a)}
+                onClick={() => {
+                  // A drag that just ended must not also open the card
+                  if (!drag) onSelect?.(a);
+                }}
+                onTouchStart={(e) => onCardTouchStart(e, a.id, sMins, dur)}
                 className={cn(
                   "absolute left-0 right-0 rounded-xl overflow-hidden text-left",
-                  "active:scale-[0.985] transition-[opacity,transform] duration-150",
+                  "transition-[opacity,transform] duration-150",
+                  !beingDragged && "active:scale-[0.985]",
                   warm ? "bg-brand-light" : "bg-surface",
                   running && "ring-[1.5px] ring-brand",
                   // Dimmed purely because the slot is over — the stored status
                   // is never changed automatically.
-                  finished && "opacity-55"
+                  finished && "opacity-55",
+                  // The original sits back while its ghost is being moved
+                  beingDragged && "opacity-30"
                 )}
                 style={{ top, height }}
               >
@@ -521,6 +678,50 @@ function DayTimelineBase({
               </button>
             );
           })}
+
+          {/*
+            * The ghost: where the appointment would land. Green when the slot
+            * accepts it, red with the reason when it doesn't — and a refused
+            * target simply won't take the drop.
+            */}
+          {drag && (
+            <div
+              className={cn(
+                "absolute left-0 right-0 rounded-xl border-2 z-30 pointer-events-none flex items-center justify-between px-3",
+                drag.valid
+                  ? "border-success bg-success-light"
+                  : "border-danger bg-danger-light"
+              )}
+              style={{
+                top: y(drag.proposedMins),
+                height: Math.max((drag.durationMins / 60) * hourH - BLOCK_GAP, 30),
+              }}
+            >
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "block text-[12px] font-black tnum",
+                    drag.valid ? "text-success" : "text-danger"
+                  )}
+                >
+                  {fmtMins(drag.proposedMins)} – {fmtMins(drag.proposedMins + drag.durationMins)}
+                </span>
+                {!drag.valid && drag.reason && (
+                  <span className="block text-[10px] font-semibold text-danger truncate">
+                    {drag.reason}
+                  </span>
+                )}
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] font-bold shrink-0",
+                  drag.valid ? "text-success" : "text-danger"
+                )}
+              >
+                {drag.valid ? "Suelta aquí" : "No disponible"}
+              </span>
+            </div>
+          )}
 
           {/* Drawn last so it rides on top of the cards it crosses */}
           <NowIndicator

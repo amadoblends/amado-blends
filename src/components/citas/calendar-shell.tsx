@@ -17,11 +17,15 @@ import { FullCalendarSheet } from "./full-calendar-sheet";
 import { SlotActionsCard, type SlotAction } from "./slot-actions-card";
 import { BlockDetailModal, type TimeOff } from "./block-detail-modal";
 import {
-  useDensity, HOUR_HEIGHT, DENSITIES, DENSITY_LABEL,
+  useDensity, useZoom, useSnap, DENSITIES, DENSITY_LABEL, SNAP_OPTIONS,
 } from "@/lib/calendar-density";
+import { rescheduleAppointment } from "@/lib/actions/appointments";
+import { shopDateAt } from "@/lib/timezone";
+import { fmtHHMM } from "@/lib/time";
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
 import { Modal } from "@/components/ui/modal";
 import { reasonLabel } from "@/lib/closures";
+import { cn } from "@/lib/utils";
 import type { SlotVerdict } from "@/lib/slot-availability";
 import type {
   AppointmentRow,
@@ -85,10 +89,48 @@ export function CalendarShell({
   const [rejected, setRejected] = useState<SlotVerdict | null>(null);
   // A block or closure opened from the calendar for editing / removal
   const [timeOff, setTimeOff] = useState<TimeOff | null>(null);
+  const [calendarSettingsOpen, setCalendarSettingsOpen] = useState(false);
 
-  // Purely visual: how many hours fit on screen
+  // Purely visual: how many hours fit on screen. Pinching drives the same
+  // value continuously; the presets are shortcuts to sensible points on it.
   const [density, setDensity] = useDensity();
-  const hourH = HOUR_HEIGHT[density];
+  const [hourH, setHourH] = useZoom(density);
+  const [snapMinutes, setSnapMinutes] = useSnap();
+
+  /**
+   * A card was dragged to a validated time. The timeline has already checked
+   * the slot, so this just persists it — rescheduleAppointment notifies the
+   * client and records the change.
+   */
+  const handleMoveAppointment = useCallback(
+    (appointmentId: string, hhmm: string) => {
+      const moved = appointments.find((a) => a.id === appointmentId);
+      if (!moved) return;
+
+      const fd = new FormData();
+      fd.set("appointmentId", appointmentId);
+      fd.set("serviceId", moved.service.id);
+      fd.set("startsAt", shopDateAt(dateStr, hhmm).toISOString());
+      fd.set(
+        "displayWhen",
+        `${format(new Date(dateStr + "T00:00:00"), "EEEE d 'de' MMMM", { locale: es })} a las ${fmtHHMM(hhmm)}`
+      );
+
+      startTransition(async () => {
+        const result = await rescheduleAppointment(fd);
+        if (!result.ok) {
+          setRejected({
+            ok: false,
+            title: "No se pudo mover",
+            detail: result.error,
+          });
+          return;
+        }
+        router.refresh();
+      });
+    },
+    [appointments, dateStr, router]
+  );
 
   /*
    * The selected day and view are mirrored locally so a tap paints
@@ -293,19 +335,17 @@ export function CalendarShell({
         <div className="flex-1 min-w-0">
           <ViewSwitcher view={pendingView} onSetView={handleSetView} />
         </div>
-        {/* Density cycles compact → normal → amplia; visual only */}
+        {/* Scale and drag precision, both visual-only settings */}
         {pendingView === "day" && (
           <button
-            onClick={() =>
-              setDensity(DENSITIES[(DENSITIES.indexOf(density) + 1) % DENSITIES.length])
-            }
-            title={`Densidad: ${DENSITY_LABEL[density]}`}
-            aria-label={`Densidad del calendario: ${DENSITY_LABEL[density]}`}
+            onClick={() => setCalendarSettingsOpen(true)}
+            title="Escala y precisión"
+            aria-label="Ajustes de escala del calendario"
             className="h-[52px] w-12 rounded-2xl bg-surface flex flex-col items-center justify-center gap-0.5 shrink-0 active:scale-95 transition-transform"
           >
             <Rows2 size={16} className="text-muted" />
             <span className="text-[8px] font-bold text-muted uppercase leading-none">
-              {DENSITY_LABEL[density].slice(0, 4)}
+              {snapMinutes}m
             </span>
           </button>
         )}
@@ -351,6 +391,9 @@ export function CalendarShell({
               shortestServiceMins={shortestServiceMins}
               draft={draft}
               hourH={hourH}
+              onZoomChange={setHourH}
+              snapMinutes={snapMinutes}
+              onMoveAppointment={handleMoveAppointment}
               onSelect={handleSelect}
               onSlotTap={handleSlotTap}
               onDraftTap={handleDraftTap}
@@ -392,6 +435,76 @@ export function CalendarShell({
           )}
         </div>
       </div>
+
+      {/* Scale and drag precision — visual settings, nothing about the data */}
+      <Modal
+        open={calendarSettingsOpen}
+        onClose={() => setCalendarSettingsOpen(false)}
+        title="Escala del calendario"
+      >
+        <div className="space-y-5">
+          <div>
+            <p className="text-sm font-medium text-foreground mb-1.5">Densidad</p>
+            <p className="text-xs text-muted mb-2.5">
+              Cuántas horas caben en pantalla. También puedes hacer zoom con dos dedos
+              directamente sobre el calendario.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {DENSITIES.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDensity(d)}
+                  className={cn(
+                    "h-11 rounded-xl border text-xs font-bold transition-colors",
+                    density === d
+                      ? "bg-foreground border-foreground text-background"
+                      : "border-border bg-background text-muted"
+                  )}
+                >
+                  {DENSITY_LABEL[d]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-medium text-foreground mb-1.5">
+              Precisión al mover citas
+            </p>
+            <p className="text-xs text-muted mb-2.5">
+              A qué intervalos se ajusta una cita cuando la arrastras.
+            </p>
+            <div className="grid grid-cols-5 gap-1.5">
+              {SNAP_OPTIONS.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setSnapMinutes(m)}
+                  className={cn(
+                    "h-11 rounded-xl border text-xs font-bold transition-colors",
+                    snapMinutes === m
+                      ? "bg-brand border-brand text-white"
+                      : "border-border bg-background text-muted"
+                  )}
+                >
+                  {m}m
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-xs text-muted bg-background rounded-xl border border-border px-3.5 py-3">
+            Mantén presionada una cita para moverla. Solo podrás soltarla en horas
+            realmente disponibles.
+          </p>
+
+          <button
+            onClick={() => setCalendarSettingsOpen(false)}
+            className="w-full h-11 rounded-xl bg-foreground text-background text-sm font-bold"
+          >
+            Listo
+          </button>
+        </div>
+      </Modal>
 
       {/* Edit or lift a block / closure straight from the calendar */}
       <BlockDetailModal target={timeOff} onClose={() => setTimeOff(null)} />
