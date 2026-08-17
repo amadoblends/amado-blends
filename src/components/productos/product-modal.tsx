@@ -8,8 +8,10 @@ import { Switch } from "@/components/ui/switch";
 import { ImageUploader } from "@/components/ui/image-uploader";
 import { upsertProduct, deleteProduct } from "@/lib/actions/products";
 import { cn } from "@/lib/utils";
+import { DEFAULT_CATEGORIES } from "@/lib/product-categories";
 
-export type ProductCategory = "dry" | "wet" | null;
+/** Any id from the product_categories table — see lib/product-categories. */
+export type ProductCategory = string | null;
 
 export interface ProductData {
   id: string;
@@ -20,6 +22,7 @@ export interface ProductData {
   critical_stock_threshold: number;
   image_url: string | null;
   category?: ProductCategory;
+  extra_minutes?: number | null;
   is_visible_for_sale?: boolean;
   available_for_services?: boolean;
   description?: string | null;
@@ -39,7 +42,8 @@ export function ProductModal({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(product?.image_url ?? null);
-  const [category, setCategory] = useState<ProductCategory>(product?.category ?? null);
+  const [category, setCategory] = useState<ProductCategory>(product?.category ?? "other");
+  const [extraMinutes, setExtraMinutes] = useState(product?.extra_minutes ?? 0);
   const [visibleForSale, setVisibleForSale] = useState(product?.is_visible_for_sale ?? true);
   const [availableForServices, setAvailableForServices] = useState(
     product?.available_for_services ?? true
@@ -49,6 +53,7 @@ export function ProductModal({
     setError(null);
     formData.set("imageUrl", imageUrl ?? "");
     formData.set("category", category ?? "");
+    formData.set("extraMinutes", String(extraMinutes));
     formData.set("visibleForSale", String(visibleForSale));
     formData.set("availableForServices", String(availableForServices));
 
@@ -107,27 +112,68 @@ export function ProductModal({
         {/* Category — drives how it's grouped when the client picks products */}
         <div>
           <label className="text-sm font-medium text-foreground mb-1.5 block">
-            Categoría (para servicios)
+            Categoría
           </label>
-          <div className="grid grid-cols-3 gap-2">
-            <CategoryButton
-              active={category === "dry"}
-              onClick={() => setCategory("dry")}
-              icon={<Wind size={15} />}
-              label="Seco"
+          <div className="grid grid-cols-3 gap-1.5">
+            {DEFAULT_CATEGORIES.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCategory(c.id)}
+                className={cn(
+                  "h-[54px] rounded-xl border text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 px-1 transition-colors",
+                  category === c.id
+                    ? "bg-foreground border-foreground text-background"
+                    : "border-border bg-background text-muted"
+                )}
+              >
+                <span className="text-base leading-none">{c.emoji}</span>
+                <span className="leading-tight text-center">{c.label_es}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/*
+          * Extra time. A product that lengthens the visit has to change which
+          * slots are offered, not just the receipt — the booking wizard adds
+          * this to the service's duration for that appointment only.
+          */}
+        <div>
+          <label className="text-sm font-medium text-foreground mb-1.5 block">
+            Tiempo adicional al servicio
+          </label>
+          <div className="grid grid-cols-5 gap-1.5">
+            {[0, 5, 10, 15, 20].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setExtraMinutes(m)}
+                className={cn(
+                  "h-11 rounded-xl border text-xs font-bold transition-colors",
+                  extraMinutes === m
+                    ? "bg-brand border-brand text-white"
+                    : "border-border bg-background text-muted"
+                )}
+              >
+                {m === 0 ? "—" : `+${m}`}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <input
+              type="number"
+              min={0}
+              max={240}
+              value={extraMinutes}
+              onChange={(e) => setExtraMinutes(Math.max(0, Number(e.target.value) || 0))}
+              className="form-input w-24"
             />
-            <CategoryButton
-              active={category === "wet"}
-              onClick={() => setCategory("wet")}
-              icon={<Droplet size={15} />}
-              label="Húmedo"
-            />
-            <CategoryButton
-              active={category === null}
-              onClick={() => setCategory(null)}
-              icon={<Store size={15} />}
-              label="Ninguna"
-            />
+            <p className="text-xs text-muted flex-1">
+              {extraMinutes > 0
+                ? `Si el cliente lo elige, su cita durará ${extraMinutes} min más.`
+                : "No cambia la duración de la cita."}
+            </p>
           </div>
         </div>
 

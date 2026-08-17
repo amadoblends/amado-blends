@@ -12,7 +12,9 @@ const productSchema = z.object({
   lowStockThreshold: z.coerce.number().int().min(0).max(100000),
   criticalStockThreshold: z.coerce.number().int().min(0).max(100000),
   imageUrl: z.string().url().max(2000).optional().or(z.literal("")),
-  category: z.enum(["dry", "wet"]).optional().or(z.literal("")),
+  // Any id from product_categories; that table owns the list, not this schema
+  category: z.string().trim().max(40).optional().or(z.literal("")),
+  extraMinutes: z.coerce.number().int().min(0).max(240).default(0),
   description: z.string().trim().max(500).optional().or(z.literal("")),
   // Empty means "no link"; otherwise it must be a real http(s) URL
   purchaseUrl: z
@@ -39,6 +41,7 @@ export async function upsertProduct(productId: string | null, formData: FormData
     criticalStockThreshold: formData.get("criticalStockThreshold"),
     imageUrl: formData.get("imageUrl") || "",
     category: formData.get("category") || "",
+    extraMinutes: formData.get("extraMinutes") || 0,
     visibleForSale: formData.get("visibleForSale") || "true",
     availableForServices: formData.get("availableForServices") || "true",
     description: formData.get("description") || "",
@@ -63,6 +66,7 @@ export async function upsertProduct(productId: string | null, formData: FormData
     critical_stock_threshold: parsed.data.criticalStockThreshold,
     image_url: parsed.data.imageUrl || null,
     category: parsed.data.category || null,
+    extra_minutes: parsed.data.extraMinutes,
     is_visible_for_sale: parsed.data.visibleForSale === "true",
     available_for_services: parsed.data.availableForServices === "true",
     description: parsed.data.description || null,
