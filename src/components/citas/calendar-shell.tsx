@@ -205,6 +205,7 @@ export function CalendarShell({
   }, []);
 
   const handleDraftTap = useCallback(() => setActionsFor(draft), [draft]);
+  const handleDraftClear = useCallback(() => setDraft(null), []);
 
   const handleSlotAction = useCallback(
     (action: SlotAction) => {
@@ -353,6 +354,7 @@ export function CalendarShell({
               onSelect={handleSelect}
               onSlotTap={handleSlotTap}
               onDraftTap={handleDraftTap}
+              onDraftClear={handleDraftClear}
               onSlotRejected={handleSlotRejected}
               onBlockTap={handleBlockTap}
               onClosureTap={handleClosureTap}

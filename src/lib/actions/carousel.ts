@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/actions/appointments";
 import { CAROUSEL_TYPE_VALUES } from "@/lib/carousel-types";
 import { shopDateAt, endOfShopDay } from "@/lib/timezone";
+import { diagnose, withoutKeys } from "@/lib/supabase/schema-errors";
 
 const postSchema = z.object({
   title: z.string().trim().min(2).max(120),
@@ -97,24 +98,55 @@ export async function upsertCarouselPost(
     is_draft: parsed.data.isDraft === "true",
   };
 
-  const query = postId
-    ? supabase.from("carousel_posts").update(payload).eq("id", postId)
-    : supabase.from("carousel_posts").insert(payload);
+  /*
+   * Columns added by migration 23. If that migration hasn't been run the save
+   * is retried without them rather than refused: the post still publishes,
+   * scheduled by its date columns, and the barber is told what to run to get
+   * the to-the-minute window back.
+   */
+  const V23_COLUMNS = ["starts_at", "ends_at", "is_permanent"] as const;
 
-  const { error } = await query;
+  const write = (body: Record<string, unknown>) =>
+    postId
+      ? supabase.from("carousel_posts").update(body).eq("id", postId)
+      : supabase.from("carousel_posts").insert(body);
+
+  let { error } = await write(payload);
+  let ranWithoutNewColumns = false;
+
   if (error) {
-    // Postgres says 42P01, PostgREST wraps it as PGRST205
-    const tableMissing =
-      error.code === "42P01" ||
-      error.code === "PGRST205" ||
-      /schema cache|does not exist/i.test(error.message);
-    if (tableMissing) {
+    const problem = diagnose(error);
+
+    if (problem.kind === "missing-table") {
       return {
         ok: false,
-        error: "Falta crear la tabla. Corre migration_16_carousel_status.sql en Supabase.",
+        error: "Falta la tabla del carrusel. Corre migration_16_carousel_status.sql en Supabase.",
       };
     }
-    return { ok: false, error: `No se pudo guardar: ${error.message}` };
+
+    if (problem.kind === "missing-column") {
+      const retry = await write(withoutKeys(payload, V23_COLUMNS));
+      if (retry.error) {
+        return {
+          ok: false,
+          error: `Falta la columna "${problem.column ?? "?"}" en carousel_posts. Corre migration_23_carousel_window.sql en Supabase.`,
+        };
+      }
+      error = null;
+      ranWithoutNewColumns = true;
+    } else {
+      return { ok: false, error: `No se pudo guardar: ${error.message}` };
+    }
+  }
+
+  if (ranWithoutNewColumns) {
+    revalidatePath("/carrusel");
+    revalidatePath("/");
+    return {
+      ok: true,
+      warning:
+        "Guardada. Para que caduque a la hora exacta y para usar contenido permanente, corre migration_23_carousel_window.sql en Supabase.",
+    };
   }
 
   revalidatePath("/carrusel");

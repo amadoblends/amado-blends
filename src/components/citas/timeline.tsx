@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, memo } from "react";
 import Image from "next/image";
-import { Lock, Plus } from "lucide-react";
+import { Lock, Plus, X } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { displayAppointmentName } from "@/lib/guests";
 import { PhotoLightbox } from "@/components/ui/photo-lightbox";
@@ -161,6 +161,7 @@ function DayTimelineBase({
   onSelect,
   onSlotTap,
   onDraftTap,
+  onDraftClear,
   onSlotRejected,
   onBlockTap,
   onClosureTap,
@@ -180,6 +181,8 @@ function DayTimelineBase({
   onSlotTap?: (dateStr: string, hhmm: string) => void;
   /** Second tap, on the placeholder itself — opens the action card. */
   onDraftTap?: () => void;
+  /** Removes the placeholder without opening anything. */
+  onDraftClear?: () => void;
   onSlotRejected?: (verdict: SlotVerdict) => void;
   /** Tapping a blocked stretch opens it for editing or removal. */
   onBlockTap?: (block: BlockedRange) => void;
@@ -342,9 +345,8 @@ function DayTimelineBase({
 
           {/* Pencilled-in slot: tap once to place, again to choose what to do */}
           {draftMins !== null && (
-            <button
-              onClick={onDraftTap}
-              className="absolute left-0 right-0 rounded-xl border-2 border-dashed border-brand bg-brand-light flex items-center justify-between px-3 z-10 animate-view-in overflow-hidden"
+            <div
+              className="absolute left-0 right-0 rounded-xl border-2 border-dashed border-brand bg-brand-light flex items-center z-10 animate-view-in overflow-hidden"
               style={{
                 top: y(draftMins),
                 // Sized like the shortest bookable service, so the placeholder
@@ -352,18 +354,32 @@ function DayTimelineBase({
                 height: Math.max((shortestServiceMins / 60) * hourH - BLOCK_GAP, 34),
               }}
             >
-              <span className="text-left">
-                <span className="block text-[11px] font-bold text-brand tnum">
-                  {fmtMins(draftMins)}
+              <button
+                onClick={onDraftTap}
+                className="flex-1 min-w-0 h-full flex items-center justify-between pl-3 pr-2 text-left"
+              >
+                <span className="min-w-0">
+                  <span className="block text-[11px] font-bold text-brand tnum">
+                    {fmtMins(draftMins)} – {fmtMins(draftMins + shortestServiceMins)}
+                  </span>
+                  <span className="block text-[13px] font-bold text-foreground truncate">
+                    Toca para continuar
+                  </span>
                 </span>
-                <span className="block text-[13px] font-bold text-foreground">
-                  Toca para continuar
+                <span className="w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center shrink-0">
+                  <Plus size={16} strokeWidth={3} />
                 </span>
-              </span>
-              <span className="w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center shrink-0">
-                <Plus size={16} strokeWidth={3} />
-              </span>
-            </button>
+              </button>
+
+              {/* Clearing a mis-tap shouldn't require guessing */}
+              <button
+                onClick={onDraftClear}
+                aria-label="Quitar selección"
+                className="w-10 h-full flex items-center justify-center text-muted shrink-0 border-l border-brand/25 active:bg-brand/10"
+              >
+                <X size={15} strokeWidth={2.6} />
+              </button>
+            </div>
           )}
 
           {/* Appointment cards — height is the real duration */}
@@ -451,13 +467,15 @@ function DayTimelineBase({
                       </p>
                     ) : (
                       <>
+                        {/* The full range, so the end time never has to be
+                            worked out from the duration badge */}
                         <p
                           className={cn(
                             "text-[11px] font-bold leading-tight tnum",
                             running ? "text-brand" : "text-muted"
                           )}
                         >
-                          {fmtMins(sMins)}
+                          {fmtMins(sMins)} – {fmtMins(eMins)}
                         </p>
                         <p className="text-[14px] font-bold text-foreground truncate leading-tight">
                           {name}

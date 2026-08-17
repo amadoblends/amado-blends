@@ -18,7 +18,14 @@ const appointmentSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+/**
+ * `warning` is for a save that succeeded but needs the barber's attention —
+ * a pending migration, say. Distinct from `error`, which means nothing was
+ * written.
+ */
+export type ActionResult =
+  | { ok: true; warning?: string }
+  | { ok: false; error: string };
 
 export async function createAppointment(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient();

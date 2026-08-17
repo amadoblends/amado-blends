@@ -297,6 +297,8 @@ function PostModal({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Saved, but something still needs the barber's attention
+  const [warning, setWarning] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
   const [imageUrl, setImageUrl] = useState<string | null>(post?.image_url ?? null);
@@ -309,6 +311,7 @@ function PostModal({
 
   function submit(formData: FormData, asDraft: boolean) {
     setError(null);
+    setWarning(null);
     formData.set("imageUrl", imageUrl ?? "");
     formData.set("type", type);
     formData.set("isActive", String(isActive));
@@ -321,6 +324,15 @@ function PostModal({
         return;
       }
       router.refresh();
+      /*
+       * Saved, but the database is behind on a migration. Keep the editor open
+       * so the note is actually read — closing it would hide the one thing
+       * that still needs doing.
+       */
+      if (result.warning) {
+        setWarning(result.warning);
+        return;
+      }
       onClose();
     });
   }
@@ -531,6 +543,19 @@ function PostModal({
         )}
 
         {error && <p className="text-sm text-danger bg-danger-light rounded-lg px-3 py-2">{error}</p>}
+
+        {warning && (
+          <div className="text-sm bg-warning-light border border-warning/25 rounded-lg px-3 py-2.5 space-y-2">
+            <p className="text-foreground">{warning}</p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs font-bold text-warning underline underline-offset-2"
+            >
+              Entendido, cerrar
+            </button>
+          </div>
+        )}
 
         <div className="flex gap-2">
           <button
