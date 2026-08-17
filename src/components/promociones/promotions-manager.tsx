@@ -8,6 +8,7 @@ import { BackButton } from "@/components/ui/back-button";
 import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { createPromotion, togglePromotion, deletePromotion } from "@/lib/actions/promotions";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const WEEKDAYS = [
   { value: 1, label: "L" },
@@ -53,6 +54,7 @@ export function PromotionsManager({
   const [selectedDays, setSelectedDays] = useState<Set<number>>(new Set([1, 2, 3, 4, 5, 6, 0]));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const confirm = useConfirm();
 
   function toggleDay(d: number) {
     setSelectedDays((prev) => {
@@ -89,8 +91,8 @@ export function PromotionsManager({
     });
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta promoción?")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm({ title: "¿Eliminar esta promoción?", message: "Los descuentos dejarán de aplicarse.", destructive: true, confirmLabel: "Eliminar" }))) return;
     startTransition(async () => {
       await deletePromotion(id);
       router.refresh();

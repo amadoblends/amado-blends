@@ -113,7 +113,17 @@
       "Bash(perl -0pi -e 's|\\\\.select\\\\\\(\"service_id, products\\\\\\(id, name, image_url, category, available_for_services\\\\\\)\"\\\\\\)|.select\\(\\\\n          \"service_id, products\\(id, name, image_url, category, available_for_services, extra_minutes\\)\"\\\\n        \\)|; s|      category: \"dry\" \\\\| \"wet\" \\\\| null;\\\\n      available_for_services: boolean;\\\\n    \\\\} \\\\| null;|      category: string \\\\| null;\\\\n      available_for_services: boolean;\\\\n      extra_minutes: number \\\\| null;\\\\n    } \\\\| null;|; s|      image_url: product\\\\.image_url,\\\\n      category: product\\\\.category,\\\\n    \\\\}\\\\\\);|      image_url: product.image_url,\\\\n      category: product.category,\\\\n      extra_minutes: product.extra_minutes ?? 0,\\\\n    }\\);|' \"src/app/\\(app\\)/reservar/page.tsx\")",
       "Bash(cp \"C:/Users/Angel/OneDrive/Desktop/amadoblendsbooking/src/lib/product-categories.ts\" src/lib/product-categories.ts)",
       "Bash(sed -i 's|^import { cn } from \"@/lib/utils\";|import { cn } from \"@/lib/utils\";\\\\nimport { DEFAULT_CATEGORIES } from \"@/lib/product-categories\";|' src/components/productos/product-modal.tsx)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(node -e \"console.log\\(Object.keys\\(require\\('./package.json'\\).dependencies\\).join\\(', '\\)\\)\")",
+      "Bash(node scripts/generate-vapid-keys.mjs)",
+      "Bash(mkdir -p \"mi proyecto de barbaria/src/lib/push\" \"mi proyecto de barbaria/src/lib/notifications\")",
+      "Bash(cp amadoblendsbooking/src/lib/push/web-push.ts \"mi proyecto de barbaria/src/lib/push/\")",
+      "Bash(cp amadoblendsbooking/src/lib/notifications/dispatch.ts \"mi proyecto de barbaria/src/lib/notifications/\")",
+      "Bash(cp amadoblendsbooking/src/lib/push/subscribe.ts \"mi proyecto de barbaria/src/lib/push/\")",
+      "Bash(cp src/lib/push/web-push.ts \"C:/Users/Angel/OneDrive/Desktop/mi proyecto de barbaria/src/lib/push/web-push.ts\")",
+      "Bash(cp /dev/null /tmp/push/wp.ts)",
+      "Bash(cp src/lib/push/web-push.ts /tmp/push/wp.ts)",
+      "Bash(node --experimental-strip-types /tmp/push/run.ts)"
     ]
   }
 }

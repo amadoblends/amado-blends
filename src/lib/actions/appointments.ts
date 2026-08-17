@@ -8,6 +8,7 @@ import {
   notifyCancelledByBarber,
   notifyRescheduledByBarber,
 } from "@/lib/actions/notify";
+import { dispatch, recordChannel, type EventKind } from "@/lib/notifications/dispatch";
 
 const appointmentSchema = z.object({
   clientId: z.string().uuid(),
@@ -146,19 +147,25 @@ export async function rescheduleAppointment(formData: FormData): Promise<ActionR
     return { ok: false, error: "No se pudo reagendar la cita." };
   }
 
-  await notifyAppointmentClient(
+  const eventId = await notifyAppointmentClient(
     supabase,
     parsed.data.appointmentId,
+    "booking_rescheduled",
     "Tu cita fue reagendada 📅",
     parsed.data.displayWhen
       ? `Tu nueva cita es el ${parsed.data.displayWhen}. Toca para ver los detalles.`
-      : "El barbero cambió el horario de tu cita. Toca para ver los detalles."
+      : "El barbero cambió el horario de tu cita. Toca para ver los detalles.",
+    { previousStartsAt: before?.starts_at ?? null, newStartsAt: startsAt.toISOString() }
   );
 
+  // The email carries the calendar invite, so it's sent by notify.ts and its
+  // outcome written back onto the same event
   if (before?.starts_at) {
-    await notifyRescheduledByBarber(parsed.data.appointmentId, before.starts_at).catch(
-      () => {}
-    );
+    await notifyRescheduledByBarber(parsed.data.appointmentId, before.starts_at)
+      .then(() => recordChannel(supabase, eventId, "email", "sent"))
+      .catch((e) =>
+        recordChannel(supabase, eventId, "email", `failed: ${e?.message ?? String(e)}`)
+      );
   }
 
   revalidatePath("/citas");
@@ -167,25 +174,49 @@ export async function rescheduleAppointment(formData: FormData): Promise<ActionR
   return { ok: true };
 }
 
-// Insert an in-app notification for the appointment's client (best-effort)
+/**
+ * Tells the appointment's client that the barber changed something.
+ *
+ * This used to insert straight into client_notifications, which meant the
+ * bell, the email and (later) push were three unrelated paths that could
+ * disagree. It now goes through the dispatcher: one event row, every enabled
+ * channel derived from it, and the outcome of each recorded on that row.
+ *
+ * The email is sent separately by lib/actions/notify because it needs the
+ * full appointment and a calendar invite, so it's skipped here and its result
+ * written back afterwards.
+ */
 async function notifyAppointmentClient(
   supabase: Awaited<ReturnType<typeof createClient>>,
   appointmentId: string,
+  kind: EventKind,
   title: string,
-  body: string
-) {
+  body: string,
+  payload: Record<string, unknown> = {}
+): Promise<string | null> {
   const { data: apt } = await supabase
     .from("appointments")
     .select("client_id")
     .eq("id", appointmentId)
-    .single();
-  if (!apt?.client_id) return;
-  await supabase.from("client_notifications").insert({
-    client_id: apt.client_id,
-    title,
-    body,
-    type: "cita",
-  });
+    .maybeSingle();
+
+  const { eventId } = await dispatch(
+    supabase,
+    {
+      kind,
+      appointmentId,
+      clientId: apt?.client_id ?? null,
+      actor: "barber",
+      title,
+      body,
+      // Tapping the push opens that appointment, not just the app
+      href: `/citas/${appointmentId}`,
+      payload,
+    },
+    { skip: ["email"] }
+  );
+
+  return eventId;
 }
 
 // "no_show" was missing here, so the detail card's "No asistió" button was
@@ -218,23 +249,28 @@ export async function updateAppointmentStatus(appointmentId: string, status: str
 
   if (error) return { ok: false, error: "No se pudo actualizar la cita." };
 
-  if (parsedStatus.data === "cancelada" || parsedStatus.data === "no_show") {
-    // Email: the client hears about a cancellation, but a no-show is only
-    // recorded for the shop — see notifyCancelledByBarber.
-    await notifyCancelledByBarber(parsedId.data, parsedStatus.data).catch(() => {});
-  }
-
   if (parsedStatus.data === "cancelada") {
-    await notifyAppointmentClient(
+    const eventId = await notifyAppointmentClient(
       supabase,
       parsedId.data,
+      "booking_cancelled",
       "Tu cita fue cancelada ❌",
       "El barbero canceló tu cita. Puedes reservar un nuevo horario desde la app."
     );
+    await notifyCancelledByBarber(parsedId.data, "cancelada")
+      .then(() => recordChannel(supabase, eventId, "email", "sent"))
+      .catch((e) =>
+        recordChannel(supabase, eventId, "email", `failed: ${e?.message ?? String(e)}`)
+      );
+  } else if (parsedStatus.data === "no_show") {
+    // Recorded for the shop only — telling a client by push and email that
+    // they didn't turn up isn't the app's job.
+    await notifyCancelledByBarber(parsedId.data, "no_show").catch(() => {});
   } else if (parsedStatus.data === "confirmada") {
     await notifyAppointmentClient(
       supabase,
       parsedId.data,
+      "booking_updated",
       "Tu cita fue confirmada ✅",
       "Te esperamos. Toca para ver los detalles de tu cita."
     );

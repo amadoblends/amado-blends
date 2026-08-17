@@ -9,6 +9,7 @@ import { ImageUploader } from "@/components/ui/image-uploader";
 import { upsertService, deleteService } from "@/lib/actions/products";
 import { cn } from "@/lib/utils";
 import type { ServiceKind } from "@/lib/supabase/types";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export interface ProductOption {
   id: string;
@@ -59,6 +60,7 @@ export function ServiceModal({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const confirm = useConfirm();
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(service?.image_url ?? null);
   const [isPublic, setIsPublic] = useState(service?.is_public ?? true);
@@ -105,9 +107,9 @@ export function ServiceModal({
     });
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!service) return;
-    if (!confirm("¿Eliminar este servicio?")) return;
+    if (!(await confirm({ title: "¿Eliminar este servicio?", message: "Tus clientes ya no podrán reservarlo.", destructive: true, confirmLabel: "Eliminar" }))) return;
     startTransition(async () => {
       const result = await deleteService(service.id);
       if (!result.ok) {

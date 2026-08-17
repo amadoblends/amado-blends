@@ -22,6 +22,7 @@ import {
 import { CAROUSEL_TYPES } from "@/lib/carousel-types";
 import { cn } from "@/lib/utils";
 
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import {
   carouselStatus,
   STATUS_LABEL,
@@ -75,6 +76,7 @@ export function CarouselManager({
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<CarouselPost | null>(null);
   const [isPending, startTransition] = useTransition();
+  const confirm = useConfirm();
 
   function run(fn: () => Promise<unknown>) {
     startTransition(async () => {
@@ -257,9 +259,14 @@ export function CarouselManager({
                   )}
 
                   <button
-                    onClick={() => {
-                      if (!confirm(`¿Eliminar «${p.title}»?`)) return;
-                      run(() => deleteCarouselPost(p.id));
+                    onClick={async () => {
+                      const yes = await confirm({
+                        title: `¿Eliminar «${p.title}»?`,
+                        message: "Tus clientes dejarán de verla al instante.",
+                        destructive: true,
+                        confirmLabel: "Eliminar",
+                      });
+                      if (yes) run(() => deleteCarouselPost(p.id));
                     }}
                     disabled={isPending}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-danger active:bg-danger-light disabled:opacity-50"

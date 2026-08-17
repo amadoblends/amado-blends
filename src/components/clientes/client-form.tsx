@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClientRecord, updateClientRecord, deleteClientRecord } from "@/lib/actions/clients";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface ClientFormProps {
   mode: "create" | "edit";
@@ -19,6 +20,7 @@ interface ClientFormProps {
 export function ClientForm({ mode, clientId, defaults }: ClientFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const confirm = useConfirm();
   const [error, setError] = useState<string | null>(null);
 
   function handleSubmit(formData: FormData) {
@@ -43,9 +45,9 @@ export function ClientForm({ mode, clientId, defaults }: ClientFormProps) {
     });
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!clientId) return;
-    if (!confirm("¿Eliminar este cliente? Esta acción no se puede deshacer.")) return;
+    if (!(await confirm({ title: "¿Eliminar este cliente?", message: "Se borrará su historial. Esta acción no se puede deshacer.", destructive: true, confirmLabel: "Eliminar" }))) return;
     startTransition(async () => {
       const result = await deleteClientRecord(clientId);
       if (!result.ok) {

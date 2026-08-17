@@ -3,6 +3,8 @@ import { Plus_Jakarta_Sans, Playfair_Display, Geist_Mono } from "next/font/googl
 import "./globals.css";
 import { PwaRegister } from "@/components/pwa-register";
 import { NativeShell } from "@/components/native-shell";
+import { AppSplash } from "@/components/ui/app-splash";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import { ThemeScript } from "@/components/theme/theme-provider";
 
 // UI type: geometric, tight, excellent lining numerals for the calendar
@@ -69,7 +71,12 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <PwaRegister />
         <NativeShell />
-        <div className="app-shell flex flex-col">{children}</div>
+        {/* Covers the black gap before the first paint */}
+        <AppSplash />
+        {/* Every destructive action asks through our own dialog, not the browser's */}
+        <ConfirmProvider>
+          <div className="app-shell flex flex-col">{children}</div>
+        </ConfirmProvider>
       </body>
     </html>
   );

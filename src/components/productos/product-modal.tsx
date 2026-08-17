@@ -9,6 +9,7 @@ import { ImageUploader } from "@/components/ui/image-uploader";
 import { upsertProduct, deleteProduct } from "@/lib/actions/products";
 import { cn } from "@/lib/utils";
 import { DEFAULT_CATEGORIES } from "@/lib/product-categories";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 /** Any id from the product_categories table — see lib/product-categories. */
 export type ProductCategory = string | null;
@@ -40,6 +41,7 @@ export function ProductModal({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const confirm = useConfirm();
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(product?.image_url ?? null);
   const [category, setCategory] = useState<ProductCategory>(product?.category ?? "other");
@@ -68,9 +70,9 @@ export function ProductModal({
     });
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!product) return;
-    if (!confirm("¿Eliminar este producto?")) return;
+    if (!(await confirm({ title: "¿Eliminar este producto?", message: "Dejará de aparecer en la tienda y en los servicios.", destructive: true, confirmLabel: "Eliminar" }))) return;
     startTransition(async () => {
       const result = await deleteProduct(product.id);
       if (!result.ok) {

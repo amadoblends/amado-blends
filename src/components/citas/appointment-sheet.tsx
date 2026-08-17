@@ -17,6 +17,7 @@ import { relationshipLabel } from "@/lib/guests";
 import { updateAppointmentStatus } from "@/lib/actions/appointments";
 import { createClient } from "@/lib/supabase/client";
 import type { AppointmentRow } from "@/lib/data/appointments";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Extra {
   serviceProducts: { name: string; category: string | null }[];
@@ -60,6 +61,7 @@ export function AppointmentSheet({
   const [extra, setExtra] = useState<Extra | null>(null);
   const [loadingExtra, setLoadingExtra] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const confirm = useConfirm();
 
   // Lock the page behind the card
   useEffect(() => {
@@ -351,7 +353,19 @@ export function AppointmentSheet({
             )}
             <ActionTile
               onClick={() => {
-                if (confirm("¿Cancelar esta cita?")) setStatus("cancelada");
+                void (async () => {
+                  if (
+                    await confirm({
+                      title: "¿Cancelar esta cita?",
+                      message: "Se le avisará al cliente y la hora quedará libre.",
+                      destructive: true,
+                      confirmLabel: "Sí, cancelar",
+                      cancelLabel: "No",
+                    })
+                  ) {
+                    setStatus("cancelada");
+                  }
+                })();
               }}
               disabled={isPending || a.status === "cancelada"}
               icon={<Ban size={19} />}
