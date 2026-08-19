@@ -14,7 +14,12 @@ export interface AppointmentRow {
   ends_at: string;
   status: AppointmentStatus;
   price: number;
-  client: { id: string; full_name: string; avatar_url: string | null };
+  client: {
+    id: string;
+    full_name: string;
+    avatar_url: string | null;
+    birth_date: string | null;
+  };
   service: { id: string; name: string; color: string };
   products: AppointmentProduct[];
   guests: string[]; // legacy guests attached to this appointment
@@ -35,7 +40,7 @@ export async function getAppointmentsForDay(date: Date): Promise<AppointmentRow[
   const { data, error } = await supabase
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, status, price, guest_name, guest_relationship, clients(id, full_name, avatar_url), services(id, name, color), appointment_products(quantity, products(name, image_url)), appointment_guests(full_name)"
+      "id, starts_at, ends_at, status, price, guest_name, guest_relationship, clients(id, full_name, avatar_url, birth_date), services(id, name, color), appointment_products(quantity, products(name, image_url)), appointment_guests(full_name)"
     )
     .gte("starts_at", from.toISOString())
     .lte("starts_at", to.toISOString())
@@ -155,7 +160,7 @@ export async function getAppointmentsInRange(
   const { data, error } = await supabase
     .from("appointments")
     .select(
-      "id, starts_at, ends_at, status, price, guest_name, guest_relationship, clients(id, full_name, avatar_url), services(id, name, color), appointment_products(quantity, products(name, image_url)), appointment_guests(full_name)"
+      "id, starts_at, ends_at, status, price, guest_name, guest_relationship, clients(id, full_name, avatar_url, birth_date), services(id, name, color), appointment_products(quantity, products(name, image_url)), appointment_guests(full_name)"
     )
     .gte("starts_at", from.toISOString())
     .lte("starts_at", to.toISOString())

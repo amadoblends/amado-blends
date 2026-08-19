@@ -5,18 +5,21 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Home, Calendar, Users, History, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NavBadge } from "@/components/nav/nav-badge";
+import { useUnseen } from "@/components/nav/unseen-provider";
 
 const items = [
   { href: "/", label: "Inicio", icon: Home },
-  { href: "/citas", label: "Citas", icon: Calendar },
+  { href: "/citas", label: "Citas", icon: Calendar, badge: "citas" as const },
   { href: "/historial", label: "Historial", icon: History },
   { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/mas", label: "Más", icon: Menu },
+  { href: "/mas", label: "Más", icon: Menu, badge: "feedback" as const },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const unseen = useUnseen();
 
   /*
    * These five destinations are one tap apart at all times, so their route
@@ -44,6 +47,7 @@ export function BottomNav() {
         {items.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
+          const count = item.badge ? unseen[item.badge] : 0;
 
           return (
             <li key={item.href} className="flex-1">
@@ -55,7 +59,10 @@ export function BottomNav() {
                   active ? "text-brand" : "text-muted"
                 )}
               >
-                <Icon size={22} strokeWidth={active ? 2.4 : 2} />
+                <span className="relative">
+                  <Icon size={22} strokeWidth={active ? 2.4 : 2} />
+                  <NavBadge count={count} />
+                </span>
                 {item.label}
               </Link>
             </li>

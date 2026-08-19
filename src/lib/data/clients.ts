@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
+import { isNewClient, DEFAULT_NEW_CLIENT } from "@/lib/client-rules";
 
 export type ClientFilter = "todos" | "frecuentes" | "nuevos" | "inactivos";
 
 /** Windows used to classify a client. Kept here so the labels in the UI and
  *  the query stay in sync. */
 export const SEGMENT_RULES = {
-  newWithinDays: 30, // registered in the last N days
+  newWithinDays: DEFAULT_NEW_CLIENT.new_client_days, // registered in the last N days
+  newMaxVisits: DEFAULT_NEW_CLIENT.new_client_visits, // and fewer than N visits
   frequentWindowDays: 90, // look-back window for counting visits
   frequentMinVisits: 3, // visits inside that window to count as frequent
   inactiveAfterDays: 90, // no visit in N days
@@ -19,7 +21,8 @@ export interface ClientRow {
   created_at: string;
   visits: number; // completed/confirmed visits in the frequent window
   lastVisit: string | null;
-  segment: Exclude<ClientFilter, "todos">;
+  /** null when the client fits none of the three buckets. */
+  segment: Exclude<ClientFilter, "todos"> | null;
 }
 
 /**
@@ -57,11 +60,14 @@ export async function getClientsWithSegments(
   ]);
 
   const visitsInWindow = new Map<string, number>();
+  // All-time count: "nuevo" expires on total visits, not on the 90-day window
+  const totalVisits = new Map<string, number>();
   const lastVisitAt = new Map<string, string>();
 
   for (const a of appointments ?? []) {
     if (!a.client_id) continue;
     if (!lastVisitAt.has(a.client_id)) lastVisitAt.set(a.client_id, a.starts_at);
+    totalVisits.set(a.client_id, (totalVisits.get(a.client_id) ?? 0) + 1);
     if (a.starts_at >= windowStart) {
       visitsInWindow.set(a.client_id, (visitsInWindow.get(a.client_id) ?? 0) + 1);
     }
@@ -73,25 +79,33 @@ export async function getClientsWithSegments(
     const visits = visitsInWindow.get(c.id) ?? 0;
     const lastVisit = lastVisitAt.get(c.id) ?? null;
 
-    const registeredDaysAgo = (now - new Date(c.created_at).getTime()) / (24 * 3600_000);
     const daysSinceVisit = lastVisit
       ? (now - new Date(lastVisit).getTime()) / (24 * 3600_000)
       : Infinity;
 
-    let segment: Exclude<ClientFilter, "todos">;
+    /*
+     * "Nuevo" has to be able to stop being true.
+     *
+     * The old rule fell through to "nuevos" for anyone who wasn't frequent
+     * and wasn't inactive, so a client of two years with a couple of visits
+     * still read as new — the badge never expired and stopped meaning
+     * anything. Now it's the shared rule from client-rules: recent *and*
+     * few visits, whichever runs out first. Someone who is none of the three
+     * simply has no segment; they still show under "Todos".
+     */
+    let segment: Exclude<ClientFilter, "todos"> | null;
     if (visits >= SEGMENT_RULES.frequentMinVisits) {
       // Regulars stay regulars even if they signed up recently
       segment = "frecuentes";
-    } else if (registeredDaysAgo <= SEGMENT_RULES.newWithinDays) {
+    } else if (isNewClient(c.created_at, totalVisits.get(c.id) ?? 0)) {
       segment = "nuevos";
     } else if (daysSinceVisit > SEGMENT_RULES.inactiveAfterDays) {
       segment = "inactivos";
     } else {
-      // Visited recently but not often enough to be a regular
-      segment = "nuevos";
+      segment = null;
     }
 
-    counts[segment]++;
+    if (segment) counts[segment]++;
     return {
       id: c.id,
       full_name: c.full_name,

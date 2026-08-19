@@ -18,10 +18,12 @@ import {
   UserCircle,
   BadgePercent,
   BarChart3,
+  MessageSquare,
 } from "lucide-react";
 
 const menu = [
   { href: "/perfil", label: "Mi perfil", icon: UserCircle },
+  { href: "/mas/feedback", label: "Comentarios de clientes", icon: MessageSquare },
   { href: "/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/productos", label: "Productos e inventario", icon: Package },
   /*

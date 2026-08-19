@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, memo } from "react";
 import Image from "next/image";
-import { Lock, Plus, X } from "lucide-react";
+import { Cake, Lock, Plus, X } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { displayAppointmentName } from "@/lib/guests";
 import { PhotoLightbox } from "@/components/ui/photo-lightbox";
@@ -13,6 +13,8 @@ import {
 } from "@/lib/time";
 import type { AppointmentRow, BlockedRange, ClosureRange } from "@/lib/data/appointments";
 import type { AvailabilityDay } from "@/lib/data/availability";
+import { isBirthdayToday } from "@/lib/client-rules";
+import { shopDateStr } from "@/lib/timezone";
 
 /*
  * A card's height IS its duration: 45 minutes of service covers exactly 45
@@ -585,6 +587,14 @@ function DayTimelineBase({
               a.guest_relationship
             );
 
+            /*
+             * Compared against the day the appointment falls on, not against
+             * today: looking at next Tuesday's calendar should show the cake
+             * on whoever turns a year older next Tuesday.
+             */
+            const birthday =
+              !a.guest_name && isBirthdayToday(a.client.birth_date, shopDateStr(a.starts_at));
+
             return (
               <button
                 key={a.id}
@@ -628,17 +638,29 @@ function DayTimelineBase({
                   )}
                 >
                   {!veryTight && (
-                    <Avatar
-                      name={a.guest_name ?? a.client.full_name}
-                      avatarUrl={a.guest_name ? null : a.client.avatar_url}
-                      size={tight ? 26 : 34}
-                      onExpand={() =>
-                        setPhoto({
-                          src: a.guest_name ? null : a.client.avatar_url,
-                          name: a.guest_name ?? a.client.full_name,
-                        })
-                      }
-                    />
+                    <span className="relative shrink-0">
+                      <Avatar
+                        name={a.guest_name ?? a.client.full_name}
+                        avatarUrl={a.guest_name ? null : a.client.avatar_url}
+                        size={tight ? 26 : 34}
+                        onExpand={() =>
+                          setPhoto({
+                            src: a.guest_name ? null : a.client.avatar_url,
+                            name: a.guest_name ?? a.client.full_name,
+                          })
+                        }
+                      />
+                      {/* Only on the day itself — a cake that shows all week
+                          stops meaning "today is the day". */}
+                      {birthday && (
+                        <span
+                          title="Cumple hoy"
+                          className="absolute -top-1 -right-1 w-[15px] h-[15px] rounded-full bg-brand text-white flex items-center justify-center ring-2 ring-surface"
+                        >
+                          <Cake size={9} strokeWidth={2.6} />
+                        </span>
+                      )}
+                    </span>
                   )}
 
                   <div className="flex-1 min-w-0">

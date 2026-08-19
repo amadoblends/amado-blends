@@ -1,18 +1,23 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Phone, MessageSquare, Pencil } from "lucide-react";
+import { Phone, MessageSquare, Pencil, Cake } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Avatar } from "@/components/ui/avatar";
 import { BackButton } from "@/components/ui/back-button";
 import { Badge } from "@/components/ui/badge";
 import { ClientTabs } from "@/components/clientes/client-tabs";
+import { ClientPhoto } from "@/components/clientes/client-photo";
+import { isBirthdayToday, isNewClient, daysFromBirthday } from "@/lib/client-rules";
 
 export default async function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
   const [{ data: client }, { data: appointments }, { data: notes }] = await Promise.all([
-    supabase.from("clients").select("id, full_name, phone, email, avatar_url, segment").eq("id", id).single(),
+    supabase
+      .from("clients")
+      .select("id, full_name, phone, email, avatar_url, segment, birth_date, created_at")
+      .eq("id", id)
+      .single(),
     supabase
       .from("appointments")
       .select("id, starts_at, ends_at, status, price, services(name)")
@@ -22,6 +27,11 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   ]);
 
   if (!client) notFound();
+
+  const birthdayToday = isBirthdayToday(client.birth_date);
+  const daysToBirthday = client.birth_date ? daysFromBirthday(client.birth_date) : null;
+  // "Nuevo" expires: it counts real visits, not the stale segment column
+  const stillNew = isNewClient(client.created_at, (appointments ?? []).length);
 
   const mappedAppointments = (appointments ?? []).map((a) => ({
     id: a.id,
@@ -54,15 +64,32 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
         </Link>
       </header>
 
+      {/* Only the barber can set this photo — see ClientPhoto. */}
+      <ClientPhoto
+        clientId={client.id}
+        clientName={client.full_name}
+        avatarUrl={client.avatar_url}
+      />
+
       <div className="flex flex-col items-center text-center gap-2">
-        <Avatar name={client.full_name} src={client.avatar_url} size={72} />
         <div>
-          <div className="flex items-center justify-center gap-1.5">
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
             <h1 className="text-lg font-bold text-foreground">{client.full_name}</h1>
             {client.segment === "frecuente" && <Badge>Frecuente</Badge>}
+            {stillNew && <Badge>Nuevo</Badge>}
+            {birthdayToday && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-light text-brand">
+                <Cake size={11} /> Cumple hoy
+              </span>
+            )}
           </div>
           <p className="text-sm text-muted">{client.phone}</p>
           {client.email && <p className="text-sm text-muted">{client.email}</p>}
+          {!birthdayToday && daysToBirthday !== null && daysToBirthday <= 7 && (
+            <p className="text-xs text-brand font-semibold mt-0.5">
+              Cumple en {daysToBirthday} {daysToBirthday === 1 ? "día" : "días"}
+            </p>
+          )}
         </div>
         <div className="flex gap-2 w-full mt-2">
           <a href={`tel:${client.phone}`} className="flex-1 flex items-center justify-center gap-2 border border-border rounded-xl py-2.5 text-sm font-semibold">

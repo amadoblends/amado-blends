@@ -7,6 +7,7 @@ import { getClientsWithSegments, type ClientFilter } from "@/lib/data/clients";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { PhotoReminder } from "@/components/clientes/photo-reminder";
 
 const SEGMENT_STYLE: Record<string, string> = {
   frecuentes: "bg-success-light text-success",
@@ -31,6 +32,13 @@ export default async function ClientsPage({
     : "todos") as ClientFilter;
 
   const { clients, counts } = await getClientsWithSegments(filter, params.q);
+
+  // Regulars without a photo: the ones the barber sees often enough for it
+  // to be worth the tap.
+  const needPhoto = clients
+    .filter((c) => !c.avatar_url && c.segment !== "inactivos")
+    .slice(0, 12)
+    .map((c) => ({ id: c.id, full_name: c.full_name }));
 
   return (
     <div className="px-4 pt-[max(10px,var(--safe-top))] pb-6 space-y-4">
@@ -64,6 +72,9 @@ export default async function ClientsPage({
         }}
       />
 
+
+      <PhotoReminder clients={needPhoto} />
+
       <div className="bg-surface rounded-2xl border border-border divide-y divide-border overflow-hidden">
         {clients.length === 0 ? (
           <p className="text-sm text-muted text-center py-10">
@@ -82,14 +93,18 @@ export default async function ClientsPage({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-semibold text-foreground truncate">{c.full_name}</p>
-                  <span
-                    className={cn(
-                      "text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0",
-                      SEGMENT_STYLE[c.segment]
-                    )}
-                  >
-                    {SEGMENT_LABEL[c.segment]}
-                  </span>
+                  {/* No badge for a client who is simply a client — the label
+                      only earns its space when it says something. */}
+                  {c.segment && (
+                    <span
+                      className={cn(
+                        "text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0",
+                        SEGMENT_STYLE[c.segment]
+                      )}
+                    >
+                      {SEGMENT_LABEL[c.segment]}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-muted">{c.phone}</p>
                 <p className="text-[11px] text-muted">

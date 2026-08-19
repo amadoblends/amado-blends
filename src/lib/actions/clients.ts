@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/lib/actions/appointments";
+import { diagnose, withoutKeys } from "@/lib/supabase/schema-errors";
 
 const clientSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
@@ -28,18 +29,32 @@ export async function createClientRecord(formData: FormData): Promise<ActionResu
 
   if (!parsed.success) return { ok: false, error: "Revisa los datos del formulario." };
 
-  const { data, error } = await supabase
-    .from("clients")
-    .insert({
-      full_name: parsed.data.fullName,
-      phone: parsed.data.phone,
-      email: parsed.data.email || null,
-      birth_date: parsed.data.birthDate || null,
-      quick_notes: parsed.data.quickNotes || null,
-      segment: "nuevo",
-    })
-    .select("id")
-    .single();
+  const payload = {
+    full_name: parsed.data.fullName,
+    phone: parsed.data.phone,
+    email: parsed.data.email || null,
+    birth_date: parsed.data.birthDate || null,
+    quick_notes: parsed.data.quickNotes || null,
+    segment: "nuevo",
+    /*
+     * A walk-in: a real profile with no account behind it. Marking it lets
+     * the client app offer this same history when that person eventually
+     * registers, instead of starting them a second, empty profile.
+     */
+    created_by_barber: true,
+  };
+
+  let { data, error } = await supabase.from("clients").insert(payload).select("id").single();
+
+  // Migration 29 adds created_by_barber. Until it's run, save the client
+  // anyway rather than blocking the barber over a flag.
+  if (error && diagnose(error).kind === "missing-column") {
+    ({ data, error } = await supabase
+      .from("clients")
+      .insert(withoutKeys(payload, ["created_by_barber"]))
+      .select("id")
+      .single());
+  }
 
   if (error || !data) return { ok: false, error: "No se pudo guardar el cliente." };
 
@@ -77,6 +92,39 @@ export async function updateClientRecord(clientId: string, formData: FormData): 
     .eq("id", idCheck.data);
 
   if (error) return { ok: false, error: "No se pudo actualizar el cliente." };
+
+  revalidatePath("/clientes");
+  revalidatePath(`/clientes/${clientId}`);
+  return { ok: true };
+}
+
+/**
+ * Sets (or clears) a client's photo.
+ *
+ * Separate from updateClientRecord because the photo is the one field the
+ * client's own app may not write: the database reverts avatar changes that
+ * don't come from an admin, so it has to travel on an admin session.
+ */
+export async function setClientAvatar(
+  clientId: string,
+  url: string | null
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: "No autenticado." };
+
+  const idCheck = z.string().uuid().safeParse(clientId);
+  if (!idCheck.success) return { ok: false, error: "Cliente inválido." };
+
+  const urlCheck = url === null ? { success: true as const } : z.string().url().safeParse(url);
+  if (!urlCheck.success) return { ok: false, error: "Imagen inválida." };
+
+  const { error } = await supabase
+    .from("clients")
+    .update({ avatar_url: url })
+    .eq("id", idCheck.data);
+
+  if (error) return { ok: false, error: "No se pudo guardar la foto." };
 
   revalidatePath("/clientes");
   revalidatePath(`/clientes/${clientId}`);

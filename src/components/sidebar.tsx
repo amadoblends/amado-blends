@@ -16,6 +16,7 @@ import {
   BarChart3,
   BadgePercent,
   Images,
+  MessageSquare,
   LogOut,
   Search,
   Moon,
@@ -27,6 +28,8 @@ import { cn } from "@/lib/utils";
 import { signOut } from "@/lib/actions/auth";
 import { SearchModal, useSearchHotkey } from "@/components/search-modal";
 import { useTheme } from "@/components/theme/theme-provider";
+import { NavBadge } from "@/components/nav/nav-badge";
+import { useUnseen } from "@/components/nav/unseen-provider";
 
 /*
  * The desktop / tablet sidebar. This is the only navigation on a wide screen —
@@ -35,7 +38,7 @@ import { useTheme } from "@/components/theme/theme-provider";
  */
 const links = [
   { href: "/", label: "Inicio", icon: Home },
-  { href: "/citas", label: "Citas", icon: Calendar },
+  { href: "/citas", label: "Citas", icon: Calendar, badge: "citas" as const },
   { href: "/historial", label: "Historial", icon: History },
   { href: "/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/clientes", label: "Clientes", icon: Users },
@@ -45,6 +48,7 @@ const links = [
   { href: "/carrusel", label: "Carrusel", icon: Images },
   { href: "/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
   { href: "/notificaciones", label: "Notificaciones", icon: Bell },
+  { href: "/mas/feedback", label: "Comentarios", icon: MessageSquare, badge: "feedback" as const },
 ];
 
 const STORAGE_KEY = "sidebarPinned.v1";
@@ -63,6 +67,7 @@ export function Sidebar({
   const [hovering, setHovering] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { theme, toggle: toggleTheme } = useTheme();
+  const unseen = useUnseen();
 
   const openSearch = useCallback(() => setSearchOpen(true), []);
   useSearchHotkey(openSearch);
@@ -194,6 +199,7 @@ export function Sidebar({
             const active =
               link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
             const Icon = link.icon;
+            const count = link.badge ? unseen[link.badge] : 0;
             return (
               <Link
                 key={link.href}
@@ -207,7 +213,12 @@ export function Sidebar({
                     : "text-foreground hover:bg-background"
                 )}
               >
-                <Icon size={19} className="shrink-0" />
+                <span className="relative shrink-0 flex items-center">
+                  <Icon size={19} />
+                  {/* Collapsed, the badge is the only thing that can say
+                      "look here", so it stays visible either way. */}
+                  <NavBadge count={count} />
+                </span>
                 <span
                   className={cn(
                     "truncate transition-opacity duration-150",

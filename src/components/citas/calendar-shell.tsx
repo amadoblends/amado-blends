@@ -9,6 +9,7 @@ import { DayTimeline } from "./timeline";
 import { AppointmentWizard, type ServiceOption } from "./wizard";
 import { BlockHourQuick } from "./block-hour-quick";
 import { CalendarToolbar, ViewSwitcher, type CalendarView } from "./calendar-toolbar";
+import { CalendarSkeleton } from "./calendar-skeleton";
 import { WeekView, MonthView, YearView, closureFor } from "./calendar-views";
 import { DayStripScroller } from "./day-strip-scroller";
 import { AppointmentSheet } from "./appointment-sheet";
@@ -377,6 +378,12 @@ export function CalendarShell({
 
   // Only animate once the props for the new day have actually arrived
   const settled = pendingDate === dateStr && pendingView === view;
+  /*
+   * Only a *view* change gets a skeleton. Moving between days keeps its slide
+   * animation: the shape of the page doesn't change there, so blanking it
+   * would be a step backwards.
+   */
+  const switchingView = pendingView !== view;
   const enterClass =
     settled && slideDir === "left"
       ? "animate-day-in-left"
@@ -459,7 +466,14 @@ export function CalendarShell({
         onTouchEnd={view === "day" ? onTouchEnd : undefined}
       >
         <div key={`${view}-${dateStr}`} className={enterClass}>
-          {view === "day" && (
+          {/*
+            * Switching view: the button changed on the tap, so the body has to
+            * change with it. Showing the old view's data under the new
+            * view's label is what made the switch feel stuck.
+            */}
+          {switchingView && <CalendarSkeleton view={pendingView} />}
+
+          {!switchingView && view === "day" && (
             <DayTimeline
               appointments={shownAppointments}
               dayAvail={dayAvail}
@@ -482,7 +496,7 @@ export function CalendarShell({
             />
           )}
 
-          {view === "week" && (
+          {!switchingView && view === "week" && (
             <WeekView
               date={date}
               appointments={appointments}
@@ -499,7 +513,7 @@ export function CalendarShell({
             />
           )}
 
-          {view === "month" && (
+          {!switchingView && view === "month" && (
             <MonthView
               date={date}
               appointments={liteAppointments}
@@ -508,7 +522,7 @@ export function CalendarShell({
             />
           )}
 
-          {view === "year" && (
+          {!switchingView && view === "year" && (
             <YearView date={date} appointments={liteAppointments} closures={closures} />
           )}
         </div>
