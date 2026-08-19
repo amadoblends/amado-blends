@@ -123,7 +123,13 @@
       "Bash(cp src/lib/push/web-push.ts \"C:/Users/Angel/OneDrive/Desktop/mi proyecto de barbaria/src/lib/push/web-push.ts\")",
       "Bash(cp /dev/null /tmp/push/wp.ts)",
       "Bash(cp src/lib/push/web-push.ts /tmp/push/wp.ts)",
-      "Bash(node --experimental-strip-types /tmp/push/run.ts)"
+      "Bash(node --experimental-strip-types /tmp/push/run.ts)",
+      "Bash(sed -i 's|^import { shopDateStr } from \"@/lib/timezone\";|import { shopDateStr, shopTime } from \"@/lib/timezone\";|' src/components/notificaciones/notifications-list.tsx)",
+      "Bash(node scripts/check-timezone.mjs)",
+      "Bash(echo \"--- exit: $? ---\")",
+      "Bash(perl -0pi -e 's|    serviceId: formData\\\\.get\\\\\\(\"serviceId\"\\\\\\),|    serviceId: formData.get\\(\"serviceId\"\\) \\\\|\\\\| undefined,|' src/lib/actions/appointments.ts)",
+      "Bash(perl -0pi -e 's|    <div\\\\n      className=\"absolute left-0 right-0 z-20 pointer-events-none\"\\\\n      style=\\\\{\\\\{ top, willChange: \"transform\" \\\\}\\\\}\\\\n    >|    <div\\\\n      id=\"now-indicator\"\\\\n      className=\"absolute left-0 right-0 z-20 pointer-events-none\"\\\\n      style={{ top, willChange: \"transform\" }}\\\\n    >|' src/components/citas/timeline.tsx)",
+      "Bash(perl -0pi -e 's|import \\\\{ localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins \\\\} from \"\\\\@/lib/time\";|import {\\\\n  localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins, localDateStr,\\\\n} from \"\\\\@/lib/time\";|' src/components/citas/block-detail-modal.tsx)"
     ]
   }
 }

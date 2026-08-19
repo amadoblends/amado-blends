@@ -12,7 +12,9 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { CLOSURE_REASONS, reasonLabel } from "@/lib/closures";
 import { createClient } from "@/lib/supabase/client";
-import { localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins } from "@/lib/time";
+import {
+  localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins, localDateStr,
+} from "@/lib/time";
 import { shopDateAt, endOfShopDay } from "@/lib/timezone";
 import type { BlockedRange, ClosureRange } from "@/lib/data/appointments";
 
@@ -57,7 +59,12 @@ export function BlockDetailModal({
     if (target.kind === "block") {
       const b = target.block;
       const s = localMins(b.starts_at);
-      const day = b.starts_at.slice(0, 10);
+      /*
+       * The shop's day, not the first ten characters of the ISO string —
+       * that is the UTC date, so an evening block opened as the next day and
+       * saving it moved the block twenty-four hours.
+       */
+      const day = localDateStr(b.starts_at);
       setStartDate(day);
       setEndDate(day);
       setStartTime(fromMins(s));

@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { rescheduleAppointment } from "@/lib/actions/appointments";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import type { AvailabilityDay } from "@/lib/data/availability";
+import { shopDateAt, shopTime, shopFormat } from "@/lib/timezone";
 
 const WEEK_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
 
@@ -87,9 +88,9 @@ export function RescheduleModal({
     if (!open) return;
     let alive = true;
     const supabase = createBrowserClient();
-    const [y, mo, d] = date.split("-").map(Number);
-    const dayStart = new Date(y, mo - 1, d, 0, 0, 0);
-    const dayEnd = new Date(y, mo - 1, d, 23, 59, 59);
+    // The shop's day, so the busy window matches what the barber sees
+    const dayStart = shopDateAt(date, "00:00");
+    const dayEnd = new Date(shopDateAt(date, "00:00").getTime() + 86_399_000);
     const ownStart = new Date(currentStartsAt).getTime();
     const ownEnd = new Date(currentEndsAt).getTime();
     supabase
@@ -137,17 +138,18 @@ export function RescheduleModal({
     if (!time || !service) return;
     setError(null);
     startTransition(async () => {
-      const [y, mo, d] = date.split("-").map(Number);
-      const [h, mi] = time.split(":").map(Number);
-      const startsAt = new Date(y, mo - 1, d, h, mi, 0).toISOString();
+      // The shop's wall clock, not this device's — see lib/timezone
+      const startsAt = shopDateAt(date, time).toISOString();
 
       const fd = new FormData();
       fd.set("appointmentId", appointmentId);
-      fd.set("serviceId", service.id);
+      // Only sent when the barber actually picked a different one; otherwise
+      // the action keeps the appointment's existing service, price and extras.
+      if (service.id !== currentServiceId) fd.set("serviceId", service.id);
       fd.set("startsAt", startsAt);
       fd.set(
         "displayWhen",
-        `${format(new Date(y, mo - 1, d), "EEEE d 'de' MMMM", { locale: es })} a las ${fmtSlot(time)}`
+        `${shopFormat(startsAt, { weekday: "long", day: "numeric", month: "long" })} a las ${fmtSlot(time)}`
       );
 
       const result = await rescheduleAppointment(fd);

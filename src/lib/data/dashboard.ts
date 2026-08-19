@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { countsAsAttended } from "@/lib/appointment-status";
 import { startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, format } from "date-fns";
 import { es } from "date-fns/locale";
+import { shopTime, shopFormat } from "@/lib/timezone";
 
 export interface DashboardData {
   todayRevenue: number; // projected: everything not cancelled
@@ -121,7 +122,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const dayBuckets = new Map<string, number>();
   for (const a of weekApts.data ?? []) {
-    const key = format(new Date(a.starts_at), "EEEEEE", { locale: es });
+    // Bucketed by the shop's weekday, not the server's UTC one
+    const key = shopFormat(a.starts_at, { weekday: "short" }).replace(".", "");
     dayBuckets.set(key, (dayBuckets.get(key) ?? 0) + Number(a.price));
   }
   const weekRevenue = Array.from(dayBuckets.entries()).map(([day, total]) => ({ day, total }));
@@ -133,7 +135,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     .slice(0, 4)
     .map((a) => ({
       id: a.id,
-      time: format(new Date(a.starts_at), "h:mm a"),
+      time: shopTime(a.starts_at),
       clientName: (a.clients as unknown as { full_name: string })?.full_name ?? "Cliente",
       clientAvatar: (a.clients as unknown as { avatar_url: string | null })?.avatar_url ?? null,
       serviceName: (a.services as unknown as { name: string })?.name ?? "",

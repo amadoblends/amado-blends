@@ -32,6 +32,7 @@ function CalendarToolbarBase({
   displayDate,
   onNavigate,
   onSetView,
+  onGoToToday,
   onOpenPicker,
   onNewAppointment,
 }: {
@@ -41,6 +42,9 @@ function CalendarToolbarBase({
   displayDate?: Date;
   onNavigate: (date: Date, view: CalendarView) => void;
   onSetView: (view: CalendarView) => void;
+  /** The corner button: straight back to today. */
+  onGoToToday: () => void;
+  /** The title: pick any month and day. */
   onOpenPicker: () => void;
   onNewAppointment: () => void;
 }) {
@@ -74,8 +78,9 @@ function CalendarToolbarBase({
         {/* Opens the full date picker */}
         <div className="flex items-center gap-1 shrink-0">
           <button
-            onClick={onOpenPicker}
-            aria-label="Abrir calendario"
+            onClick={onGoToToday}
+            aria-label="Ir a hoy"
+            title="Ir a hoy"
             className="w-10 h-10 rounded-xl flex items-center justify-center text-brand shrink-0 active:bg-surface transition-colors"
           >
             <span className="relative flex items-center justify-center">

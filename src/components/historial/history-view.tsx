@@ -12,6 +12,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/badge";
 import { HistoryCalendar } from "./history-calendar";
 import type { HistoryRow } from "@/lib/data/appointments";
+import { shopTime, shopFormat } from "@/lib/timezone";
 
 export type Period = "dia" | "mes" | "ano";
 
@@ -210,10 +211,7 @@ export function HistoryView({
                     className="flex items-center gap-3 px-4 py-3 active:bg-background"
                   >
                     <span className="text-xs font-semibold text-muted w-16 shrink-0">
-                      {new Date(a.starts_at).toLocaleTimeString([], {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
+                      {shopTime(a.starts_at)}
                     </span>
                     <span
                       className="w-1 self-stretch rounded-full shrink-0"

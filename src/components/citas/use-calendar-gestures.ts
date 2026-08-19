@@ -212,9 +212,31 @@ export function useAppointmentDrag({
         return;
       }
 
+      // Armed: this gesture belongs to the drag, not to the page
       e.preventDefault();
 
-      const movedMins = (dy / hourH) * 60;
+      /*
+       * Auto-scroll only near the edges, and at a speed proportional to how
+       * far into the edge zone the finger is.
+       *
+       * Letting the page scroll freely during a drag made the card and the
+       * calendar move at once, so the appointment never went where it looked
+       * like it was going.
+       */
+      const EDGE = 90;
+      const top = y;
+      const bottom = window.innerHeight - y;
+      let scrollStep = 0;
+      if (top < EDGE) scrollStep = -Math.round(((EDGE - top) / EDGE) * 14);
+      else if (bottom < EDGE) scrollStep = Math.round(((EDGE - bottom) / EDGE) * 14);
+
+      if (scrollStep !== 0) {
+        window.scrollBy(0, scrollStep);
+        // The rail moved under the finger, so the origin has to move with it
+        p.startY -= scrollStep;
+      }
+
+      const movedMins = ((y - p.startY) / hourH) * 60;
       const proposed = Math.max(
         dayStartMins,
         Math.min(24 * 60 - p.durationMins, snap(p.originMins + movedMins))

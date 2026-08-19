@@ -8,7 +8,7 @@ import { es } from "date-fns/locale";
 import { CalendarPlus, CalendarX, CalendarClock, ChevronRight, CheckCheck, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { shopDateStr } from "@/lib/timezone";
+import { shopDateStr, shopTime } from "@/lib/timezone";
 
 export interface NotificationRow {
   id: string;
@@ -117,7 +117,7 @@ export function NotificationsList({ notifications }: { notifications: Notificati
                     </span>
                     <span className="block text-sm text-muted mt-0.5">{n.body}</span>
                     <span className="block text-[11px] text-muted/70 mt-1 tnum">
-                      {format(new Date(n.created_at), "h:mm a")}
+                      {shopTime(n.created_at)}
                     </span>
                   </span>
                   {n.appointment_id && (

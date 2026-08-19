@@ -12,6 +12,7 @@ import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { CLOSURE_REASONS } from "@/lib/closures";
+import { shopTime, shopFormat } from "@/lib/timezone";
 import {
   createClosure,
   findClosureConflicts,
@@ -250,7 +251,7 @@ export function ClosureModal({
                       {c.guestName ?? c.clientName}
                     </p>
                     <p className="text-[11px] text-muted">
-                      {format(new Date(c.starts_at), "d MMM · h:mm a", { locale: es })} ·{" "}
+                      {shopFormat(c.starts_at, { day: "numeric", month: "short" })} · {shopTime(c.starts_at)} ·{" "}
                       {c.serviceName}
                     </p>
                   </div>

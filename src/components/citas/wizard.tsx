@@ -184,9 +184,9 @@ export function AppointmentWizard({
     if (step !== "datetime") return;
     let alive = true;
     const supabase = createBrowserClient();
-    const [y, mo, d] = data.date.split("-").map(Number);
-    const dayStart = new Date(y, mo - 1, d, 0, 0, 0);
-    const dayEnd = new Date(y, mo - 1, d, 23, 59, 59);
+    // The shop's day, so the busy window matches what the barber sees
+    const dayStart = shopDateAt(data.date, "00:00");
+    const dayEnd = new Date(shopDateAt(data.date, "00:00").getTime() + 86_399_000);
     supabase
       .rpc("get_busy_times", {
         p_start: dayStart.toISOString(),

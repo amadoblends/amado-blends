@@ -81,6 +81,7 @@ function NowIndicator({
   const top = ((nowMins - dayStart) / 60) * hourH;
   return (
     <div
+      id="now-indicator"
       className="absolute left-0 right-0 z-20 pointer-events-none"
       style={{ top, willChange: "transform" }}
     >

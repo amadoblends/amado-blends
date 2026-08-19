@@ -14,6 +14,7 @@ import {
   buildReturnDescription,
 } from "@/lib/closures";
 import { shopDateAt, endOfShopDay } from "@/lib/timezone";
+import { diagnose, withoutKeys } from "@/lib/supabase/schema-errors";
 
 export interface ConflictingAppointment {
   id: string;
@@ -148,31 +149,61 @@ export async function createClosure(formData: FormData): Promise<ActionResult> {
 
   let carouselPostId: string | null = null;
 
+  /*
+   * Columns added by migration 23. Writing them against a database that
+   * hasn't run it fails with PGRST204, whose message mentions the schema
+   * cache — which an older check here misread as "the table is missing, run
+   * migrations 16 and 17". Both had been run; neither could have helped.
+   * The announcement is retried without them so the closure still saves.
+   */
+  const V23_COLUMNS = ["starts_at", "ends_at", "is_permanent"] as const;
+
   // Optional announcement in the client carousel
   if (d.announce !== "no") {
-    const { data: post, error: postError } = await supabase
+    const announcement = {
+      title: d.announceTitle || buildClosureTitle(d.startsOn, d.endsOn),
+      description: d.announceBody || d.description || null,
+      type: d.reason === "vacaciones" ? "vacaciones" : "cerrado",
+      starts_on: null, // visible from today so clients see it coming
+      ends_on: d.endsOn,
+      // The exact instant it stops. Without this the notice never expired.
+      starts_at: null,
+      ends_at: endOfShopDay(d.endsOn).toISOString(),
+      is_active: true,
+      is_draft: d.announce === "borrador",
+      sort_order: 0,
+    };
+
+    let { data: post, error: postError } = await supabase
       .from("carousel_posts")
-      .insert({
-        title: d.announceTitle || buildClosureTitle(d.startsOn, d.endsOn),
-        description: d.announceBody || d.description || null,
-        type: d.reason === "vacaciones" ? "vacaciones" : "cerrado",
-        starts_on: null, // visible from today so clients see it coming
-        ends_on: d.endsOn,
-        // The exact instant it stops. Without this the notice never expired.
-        starts_at: null,
-        ends_at: endOfShopDay(d.endsOn).toISOString(),
-        is_active: true,
-        is_draft: d.announce === "borrador",
-        sort_order: 0,
-      })
+      .insert(announcement)
       .select("id")
       .single();
 
     if (postError) {
-      return {
-        ok: false,
-        error: `Cierre no guardado: ${postError.message}. ¿Corriste migration_16 y 17?`,
-      };
+      const problem = diagnose(postError);
+
+      if (problem.kind === "missing-column") {
+        const retry = await supabase
+          .from("carousel_posts")
+          .insert(withoutKeys(announcement, V23_COLUMNS))
+          .select("id")
+          .single();
+        post = retry.data;
+        postError = retry.error;
+      }
+
+      if (postError) {
+        return {
+          ok: false,
+          error:
+            problem.kind === "missing-table"
+              ? "Falta la tabla del carrusel. Corre migration_16_carousel_status.sql en Supabase."
+              : problem.kind === "missing-column"
+                ? `Falta la columna "${problem.column ?? "?"}" en carousel_posts. Corre migration_23_carousel_window.sql en Supabase.`
+                : `No se pudo publicar el aviso: ${postError.message}`,
+        };
+      }
     }
     carouselPostId = post?.id ?? null;
 
@@ -187,7 +218,7 @@ export async function createClosure(formData: FormData): Promise<ActionResult> {
       const back = nextWorkingDay(new Date(d.endsOn + "T00:00:00"), activeWeekdays);
 
       if (back) {
-        await supabase.from("carousel_posts").insert({
+        const teaser = {
           title: buildReturnTitle(back),
           description: buildReturnDescription(back),
           type: "aviso",
@@ -200,7 +231,14 @@ export async function createClosure(formData: FormData): Promise<ActionResult> {
           is_active: true,
           is_draft: false,
           sort_order: 0,
-        });
+        };
+        const { error: teaserError } = await supabase
+          .from("carousel_posts")
+          .insert(teaser);
+        // A missing column here is not worth failing the closure over
+        if (teaserError && diagnose(teaserError).kind === "missing-column") {
+          await supabase.from("carousel_posts").insert(withoutKeys(teaser, V23_COLUMNS));
+        }
       }
     }
   }
@@ -217,15 +255,16 @@ export async function createClosure(formData: FormData): Promise<ActionResult> {
   });
 
   if (error) {
-    const missing =
-      error.code === "42P01" ||
-      error.code === "PGRST205" ||
-      /schema cache|does not exist/i.test(error.message);
+    // Same lesson as the carousel: name the actual problem, not a guess
+    const problem = diagnose(error);
     return {
       ok: false,
-      error: missing
-        ? "Falta la tabla de cierres. Corre migration_17_closures_theme_slots.sql en Supabase."
-        : `No se pudo guardar el cierre: ${error.message}`,
+      error:
+        problem.kind === "missing-table"
+          ? "Falta la tabla de cierres. Corre migration_17_closures_theme_slots.sql en Supabase."
+          : problem.kind === "missing-column"
+            ? `Falta la columna "${problem.column ?? "?"}" en closures. Revisa migration_17_closures_theme_slots.sql.`
+            : `No se pudo guardar el cierre: ${error.message}`,
     };
   }
 

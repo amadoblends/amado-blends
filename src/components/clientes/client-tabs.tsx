@@ -10,6 +10,7 @@ import { addClientNote } from "@/lib/actions/clients";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { AppointmentStatus, NoteType } from "@/lib/supabase/types";
+import { shopTime, shopFormat } from "@/lib/timezone";
 
 type Appointment = {
   id: string;
@@ -140,10 +141,10 @@ function AppointmentRow({ a }: { a: Appointment }) {
     <li className="flex items-center justify-between bg-background rounded-xl px-3 py-2.5">
       <div>
         <p className="text-sm font-semibold text-foreground">
-          {format(new Date(a.starts_at), "EEEE, d 'de' MMMM", { locale: es })}
+          {shopFormat(a.starts_at, { weekday: "long", day: "numeric", month: "long" })}
         </p>
         <p className="text-xs text-muted">
-          {format(new Date(a.starts_at), "h:mm a")} – {a.service_name}
+          {shopTime(a.starts_at)} – {a.service_name}
         </p>
       </div>
       <StatusBadge status={a.status} />
@@ -214,7 +215,7 @@ function NotesTab({ clientId, notes }: { clientId: string; notes: Note[] }) {
           <li key={n.id} className={cn("border-l-4 rounded-lg px-3 py-2.5", noteTypeStyles[n.type])}>
             <p className="text-xs font-semibold text-foreground">{noteTypeLabels[n.type]}</p>
             <p className="text-sm text-foreground mt-0.5">{n.content}</p>
-            <p className="text-[11px] text-muted mt-1">{format(new Date(n.created_at), "d MMM yyyy", { locale: es })}</p>
+            <p className="text-[11px] text-muted mt-1">{shopFormat(n.created_at, { day: "numeric", month: "short", year: "numeric" })}</p>
           </li>
         ))}
       </ul>

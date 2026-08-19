@@ -90,7 +90,12 @@ export async function createAppointment(formData: FormData): Promise<ActionResul
 
 const rescheduleSchema = z.object({
   appointmentId: z.string().uuid(),
-  serviceId: z.string().uuid(),
+  /*
+   * Optional on purpose. A reschedule that doesn't mention a service keeps
+   * the one the appointment already has — sending it was how callers
+   * accidentally changed it.
+   */
+  serviceId: z.string().uuid().optional(),
   startsAt: z.string().min(10),
   displayWhen: z.string().max(120).optional(),
 });
@@ -104,7 +109,8 @@ export async function rescheduleAppointment(formData: FormData): Promise<ActionR
 
   const parsed = rescheduleSchema.safeParse({
     appointmentId: formData.get("appointmentId"),
-    serviceId: formData.get("serviceId"),
+    // Absent means "keep the service it already has"
+    serviceId: formData.get("serviceId") || undefined,
     startsAt: formData.get("startsAt"),
     displayWhen: formData.get("displayWhen") || undefined,
   });
@@ -113,31 +119,62 @@ export async function rescheduleAppointment(formData: FormData): Promise<ActionR
   const startsAt = new Date(parsed.data.startsAt);
   if (Number.isNaN(startsAt.getTime())) return { ok: false, error: "Fecha/hora inválida." };
 
-  // Duration and price come from the (possibly new) service
-  const { data: service } = await supabase
-    .from("services")
-    .select("duration_minutes, price")
-    .eq("id", parsed.data.serviceId)
-    .single();
-  if (!service) return { ok: false, error: "Servicio no encontrado." };
+  // Nobody may move an appointment into the past — not the client, not the
+  // barber. The UI hides those slots; this is the check that actually holds.
+  if (startsAt.getTime() < Date.now()) {
+    return { ok: false, error: "No puedes reagendar a una fecha u hora que ya pasó." };
+  }
 
-  const endsAt = new Date(startsAt.getTime() + service.duration_minutes * 60000);
-
-  // Read the old time before overwriting it — the email says "antes era..."
+  /*
+   * Read the whole appointment first. Rescheduling changes the date and the
+   * time — nothing else.
+   *
+   * This function used to overwrite service_id and price unconditionally from
+   * whatever serviceId the caller sent, which is how a reschedule could
+   * silently change the service. It also recomputed the end from the
+   * service's base duration, dropping any extra minutes the client's chosen
+   * products had added, so a 45-minute cut booked as 55 came back as 45 and
+   * the next slot could be double-booked.
+   */
   const { data: before } = await supabase
     .from("appointments")
-    .select("starts_at")
+    .select("starts_at, service_id, price, extra_minutes")
     .eq("id", parsed.data.appointmentId)
     .maybeSingle();
 
+  if (!before) return { ok: false, error: "Cita no encontrada." };
+
+  // Only an explicit, different service counts as a change of service
+  const changingService =
+    Boolean(parsed.data.serviceId) && parsed.data.serviceId !== before.service_id;
+  const serviceId = changingService ? parsed.data.serviceId! : before.service_id;
+
+  const { data: service } = await supabase
+    .from("services")
+    .select("duration_minutes, price")
+    .eq("id", serviceId)
+    .maybeSingle();
+  if (!service) return { ok: false, error: "Servicio no encontrado." };
+
+  // Extras the client picked stay part of the booking's length
+  const extra = before.extra_minutes ?? 0;
+  const endsAt = new Date(startsAt.getTime() + (service.duration_minutes + extra) * 60000);
+
+  const patch: Record<string, unknown> = {
+    starts_at: startsAt.toISOString(),
+    ends_at: endsAt.toISOString(),
+  };
+
+  // Price follows the service only when the service actually changed;
+  // otherwise a discounted booking would silently revert to list price.
+  if (changingService) {
+    patch.service_id = serviceId;
+    patch.price = service.price;
+  }
+
   const { error } = await supabase
     .from("appointments")
-    .update({
-      service_id: parsed.data.serviceId,
-      starts_at: startsAt.toISOString(),
-      ends_at: endsAt.toISOString(),
-      price: service.price,
-    })
+    .update(patch)
     .eq("id", parsed.data.appointmentId);
 
   if (error) {

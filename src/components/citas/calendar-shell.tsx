@@ -20,7 +20,7 @@ import {
   useDensity, useZoom, useSnap, DENSITIES, DENSITY_LABEL, SNAP_OPTIONS,
 } from "@/lib/calendar-density";
 import { rescheduleAppointment } from "@/lib/actions/appointments";
-import { shopDateAt } from "@/lib/timezone";
+import { shopDateAt, shopToday } from "@/lib/timezone";
 import { fmtHHMM } from "@/lib/time";
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
 import { Modal } from "@/components/ui/modal";
@@ -90,6 +90,10 @@ export function CalendarShell({
   // A block or closure opened from the calendar for editing / removal
   const [timeOff, setTimeOff] = useState<TimeOff | null>(null);
   const [calendarSettingsOpen, setCalendarSettingsOpen] = useState(false);
+  /** Times applied locally the moment a card is dropped, before the server confirms. */
+  const [movedTimes, setMovedTimes] = useState<
+    Record<string, { starts_at: string; ends_at: string }>
+  >({});
 
   // Purely visual: how many hours fit on screen. Pinching drives the same
   // value continuously; the presets are shortcuts to sensible points on it.
@@ -107,10 +111,29 @@ export function CalendarShell({
       const moved = appointments.find((a) => a.id === appointmentId);
       if (!moved) return;
 
+      const startsAt = shopDateAt(dateStr, hhmm);
+
+      /*
+       * Optimistic: the card jumps to its new slot the instant it's dropped.
+       * Waiting for the server made a drag feel like it hadn't registered.
+       * If the write fails the override is dropped and the card springs back
+       * to where it was, with the reason.
+       */
+      setMovedTimes((prev) => ({
+        ...prev,
+        [appointmentId]: {
+          starts_at: startsAt.toISOString(),
+          ends_at: new Date(
+            startsAt.getTime() +
+              (new Date(moved.ends_at).getTime() - new Date(moved.starts_at).getTime())
+          ).toISOString(),
+        },
+      }));
+
       const fd = new FormData();
       fd.set("appointmentId", appointmentId);
-      fd.set("serviceId", moved.service.id);
-      fd.set("startsAt", shopDateAt(dateStr, hhmm).toISOString());
+      // Deliberately NOT sending serviceId — a move changes the time only.
+      fd.set("startsAt", startsAt.toISOString());
       fd.set(
         "displayWhen",
         `${format(new Date(dateStr + "T00:00:00"), "EEEE d 'de' MMMM", { locale: es })} a las ${fmtHHMM(hhmm)}`
@@ -119,6 +142,12 @@ export function CalendarShell({
       startTransition(async () => {
         const result = await rescheduleAppointment(fd);
         if (!result.ok) {
+          // Put it back where it was and say why
+          setMovedTimes((prev) => {
+            const next = { ...prev };
+            delete next[appointmentId];
+            return next;
+          });
           setRejected({
             ok: false,
             title: "No se pudo mover",
@@ -131,6 +160,33 @@ export function CalendarShell({
     },
     [appointments, dateStr, router]
   );
+
+  /*
+   * Once the server's own copy arrives with the new time, the local override
+   * has served its purpose — keeping it would freeze the card against any
+   * later change.
+   */
+  useEffect(() => {
+    setMovedTimes((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      const next: typeof prev = {};
+      let changed = false;
+      for (const [id, override] of Object.entries(prev)) {
+        const server = appointments.find((a) => a.id === id);
+        if (server && server.starts_at === override.starts_at) changed = true;
+        else next[id] = override;
+      }
+      return changed ? next : prev;
+    });
+  }, [appointments]);
+
+  /** Appointments with any optimistic move applied. */
+  const shownAppointments = useMemo(() => {
+    if (Object.keys(movedTimes).length === 0) return appointments;
+    return appointments.map((a) =>
+      movedTimes[a.id] ? { ...a, ...movedTimes[a.id] } : a
+    );
+  }, [appointments, movedTimes]);
 
   /*
    * The selected day and view are mirrored locally so a tap paints
@@ -274,6 +330,27 @@ export function CalendarShell({
     setWizardOpen(true);
   }, []);
 
+  /**
+   * The corner calendar button is "go to today", not another picker.
+   *
+   * Wherever the barber is — another day, week, month or year — one tap
+   * returns them to the current day in the day view and scrolls the rail to
+   * roughly now, which is what they actually want from that button.
+   */
+  const handleGoToToday = useCallback(() => {
+    const todayKey = shopToday();
+    setVisibleMonth(undefined);
+    setDraft(null);
+    navigate(todayKey, "day");
+
+    // After the day has painted, bring the current hour into view
+    requestAnimationFrame(() => {
+      const el = document.getElementById("now-indicator");
+      if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  }, [navigate]);
+
+  /** The title still opens the month picker. */
   const handleOpenPicker = useCallback(() => setPickerOpen(true), []);
   const handleSlotRejected = useCallback((v: SlotVerdict) => setRejected(v), []);
   const handleSelect = useCallback((a: AppointmentRow) => setSelected(a), []);
@@ -317,6 +394,7 @@ export function CalendarShell({
         displayDate={pendingView === "day" ? visibleMonth : undefined}
         onNavigate={handleNavigate}
         onSetView={handleSetView}
+        onGoToToday={handleGoToToday}
         onOpenPicker={handleOpenPicker}
         onNewAppointment={handleNewAppointment}
       />
@@ -383,7 +461,7 @@ export function CalendarShell({
         <div key={`${view}-${dateStr}`} className={enterClass}>
           {view === "day" && (
             <DayTimeline
-              appointments={appointments}
+              appointments={shownAppointments}
               dayAvail={dayAvail}
               dateStr={dateStr}
               blockedTimes={blockedTimes}
