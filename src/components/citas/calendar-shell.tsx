@@ -619,6 +619,7 @@ export function CalendarShell({
         services={services}
         availability={availability}
         bookingSettings={bookingSettings}
+        closures={closures}
         defaultDate={wizardSeed?.date ?? dateStr}
         defaultTime={wizardSeed?.time}
         entry={wizardEntry}
@@ -659,6 +660,9 @@ export function CalendarShell({
           currentEndsAt={rescheduling.ends_at}
           services={services}
           availability={availability}
+          closures={closures}
+          bookingSettings={bookingSettings}
+          extraMinutes={rescheduling.extra_minutes}
         />
       )}
 

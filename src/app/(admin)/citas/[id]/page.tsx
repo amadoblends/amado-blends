@@ -10,7 +10,8 @@ import { formatCurrency } from "@/lib/utils";
 import { AppointmentStatusActions } from "@/components/citas/status-actions";
 import { RescheduleButton } from "@/components/citas/reschedule-button";
 import { LocalLongDate, LocalTimeRange } from "@/components/ui/local-datetime";
-import { getAvailability } from "@/lib/data/availability";
+import { getAvailability, getBookingSettings } from "@/lib/data/availability";
+import { getClosures } from "@/lib/data/appointments";
 
 export default async function AppointmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,11 +24,13 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
     { data: guests },
     { data: allServices },
     availability,
+    bookingSettings,
+    closures,
   ] = await Promise.all([
     supabase
       .from("appointments")
       .select(
-        "id, starts_at, ends_at, status, price, notes, service_id, guest_name, guest_relationship, clients(id, full_name, phone, email, avatar_url, quick_notes), services(name, color)"
+        "id, starts_at, ends_at, status, price, notes, service_id, extra_minutes, guest_name, guest_relationship, clients(id, full_name, phone, email, avatar_url, quick_notes), services(name, color)"
       )
       .eq("id", id)
       .single(),
@@ -48,6 +51,8 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
       .select("id, name, duration_minutes, price, color")
       .order("name"),
     getAvailability(),
+    getBookingSettings(),
+    getClosures(),
   ]);
 
   if (!appointment) notFound();
@@ -256,6 +261,9 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
           currentEndsAt={appointment.ends_at}
           services={allServices ?? []}
           availability={availability}
+          closures={closures}
+          bookingSettings={bookingSettings}
+          extraMinutes={appointment.extra_minutes ?? 0}
         />
       )}
 

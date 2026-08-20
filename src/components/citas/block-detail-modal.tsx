@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -23,11 +23,88 @@ export type TimeOff =
   | { kind: "block"; block: BlockedRange }
   | { kind: "closure"; closure: ClosureRange };
 
+/** The editable shape both kinds collapse into. */
+interface Draft {
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+  description: string;
+  inCarousel: boolean;
+}
+
+/**
+ * Reads a tapped block or closure into the form's fields.
+ *
+ * Deliberately a plain function called from useState rather than an effect:
+ * see the note on BlockDetailModal.
+ */
+function draftFrom(target: TimeOff): Draft {
+  if (target.kind === "block") {
+    const b = target.block;
+    const s = localMins(b.starts_at);
+    /*
+     * The shop's day, not the first ten characters of the ISO string — that
+     * is the UTC date, so an evening block opened as the next day and saving
+     * it moved the block twenty-four hours.
+     */
+    const day = localDateStr(b.starts_at);
+    return {
+      startDate: day,
+      endDate: day,
+      startTime: fromMins(s),
+      endTime: fromMins(s + durationMins(b.starts_at, b.ends_at)),
+      // Blocks store their motive as free text in `reason`
+      description: b.reason ?? "",
+      reason: "otro",
+      inCarousel: false,
+    };
+  }
+
+  const c = target.closure;
+  return {
+    startDate: c.starts_on,
+    endDate: c.ends_on,
+    startTime: c.start_time?.slice(0, 5) ?? "09:00",
+    endTime: c.end_time?.slice(0, 5) ?? "18:00",
+    reason: c.reason,
+    description: c.description ?? "",
+    // A closure owns its announcement through closures.carousel_post_id
+    inCarousel: Boolean(c.carousel_post_id),
+  };
+}
+
+/** A date input can hold anything; never hand date-fns something invalid. */
+function safeDay(dateStr: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  const d = new Date(dateStr + "T00:00:00");
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function fmtDay(dateStr: string, pattern: string): string {
+  const d = safeDay(dateStr);
+  return d ? format(d, pattern, { locale: es }) : "—";
+}
+
 /**
  * Everything about one blocked stretch or closure, with the controls to change
- * or remove it. Deleting frees the time immediately — the calendar re-reads
- * availability from the remaining rows, so any other block still covering
- * those hours keeps them closed.
+ * or remove it.
+ *
+ * ── Why the inner component and the key ──────────────────────────────────
+ * The fields used to be state synced from `target` by an effect. Effects run
+ * *after* render, so the first render for a newly tapped block still held the
+ * previous values — on the very first open of a session those were the empty
+ * strings the state was initialised with, `new Date("T00:00:00")` came out
+ * Invalid, and date-fns `format` throws RangeError on an invalid date. That
+ * threw during render, with no boundary between it and the framework, which
+ * is what put a Vercel error screen in front of a tapped block. It looked
+ * intermittent because a second block reused the first one's dates and
+ * rendered fine.
+ *
+ * Keying the inner component by the row's id means the state is *born* from
+ * the right target — there is no render where the two disagree, and no effect
+ * that could run late.
  */
 export function BlockDetailModal({
   target,
@@ -36,209 +113,176 @@ export function BlockDetailModal({
   target: TimeOff | null;
   onClose: () => void;
 }) {
+  if (!target) return null;
+  const id = target.kind === "block" ? target.block.id : target.closure.id;
+  return <BlockDetailForm key={id} target={target} onClose={onClose} />;
+}
+
+function BlockDetailForm({ target, onClose }: { target: TimeOff; onClose: () => void }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Editable fields, seeded from whatever was tapped ────────────────────
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("10:00");
-  const [reason, setReason] = useState("otro");
-  const [description, setDescription] = useState("");
-  const [inCarousel, setInCarousel] = useState(false);
+  const [draft, setDraft] = useState<Draft>(() => draftFrom(target));
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
+    setDraft((d) => ({ ...d, [key]: value }));
 
-  useEffect(() => {
-    if (!target) return;
-    setError(null);
-    setConfirmDelete(false);
-
-    if (target.kind === "block") {
-      const b = target.block;
-      const s = localMins(b.starts_at);
-      /*
-       * The shop's day, not the first ten characters of the ISO string —
-       * that is the UTC date, so an evening block opened as the next day and
-       * saving it moved the block twenty-four hours.
-       */
-      const day = localDateStr(b.starts_at);
-      setStartDate(day);
-      setEndDate(day);
-      setStartTime(fromMins(s));
-      setEndTime(fromMins(s + durationMins(b.starts_at, b.ends_at)));
-      // Blocks store their motive as free text in `reason`
-      setDescription(b.reason ?? "");
-      setReason("otro");
-      setInCarousel(false);
-    } else {
-      const c = target.closure;
-      setStartDate(c.starts_on);
-      setEndDate(c.ends_on);
-      setStartTime(c.start_time?.slice(0, 5) ?? "09:00");
-      setEndTime(c.end_time?.slice(0, 5) ?? "18:00");
-      setReason(c.reason);
-      setDescription(c.description ?? "");
-      setInCarousel(false);
-    }
-  }, [target]);
-
-  // A closure owns its announcement through closures.carousel_post_id
-  const carouselPostId = target?.kind === "closure" ? target.closure.carousel_post_id : null;
-  useEffect(() => {
-    setInCarousel(Boolean(carouselPostId));
-  }, [carouselPostId]);
-
-  if (!target) return null;
+  const { startDate, endDate, startTime, endTime, reason, description, inCarousel } = draft;
 
   const isBlock = target.kind === "block";
-  const allDay = !isBlock && target.closure.all_day;
+  const allDay = target.kind === "closure" && target.closure.all_day;
+  const carouselPostId = target.kind === "closure" ? target.closure.carousel_post_id : null;
 
   async function save() {
     setError(null);
     setSaving(true);
-    const supabase = createClient();
 
-    if (target!.kind === "block") {
-      const starts = dateAt(startDate, toMins(startTime));
-      const ends = dateAt(startDate, toMins(endTime));
-      if (ends <= starts) {
-        setSaving(false);
-        setError("La hora de fin debe ser después de la de inicio.");
-        return;
-      }
-      const { error: err } = await supabase
-        .from("blocked_times")
-        .update({
-          starts_at: starts.toISOString(),
-          ends_at: ends.toISOString(),
-          reason: description.trim() || "Bloqueado",
-        })
-        .eq("id", target!.block.id);
-      if (err) {
-        setSaving(false);
-        setError(`No se pudo guardar: ${err.message}`);
-        return;
-      }
-    } else {
-      const c = target!.closure;
-      if (endDate < startDate) {
-        setSaving(false);
-        setError("La fecha final no puede ser antes de la inicial.");
-        return;
-      }
-      const { error: err } = await supabase
-        .from("closures")
-        .update({
-          starts_on: startDate,
-          ends_on: endDate,
-          reason,
-          description: description.trim() || null,
-          start_time: c.all_day ? null : startTime,
-          end_time: c.all_day ? null : endTime,
-        })
-        .eq("id", c.id);
-      if (err) {
-        setSaving(false);
-        setError(`No se pudo guardar: ${err.message}`);
-        return;
-      }
+    try {
+      const supabase = createClient();
 
-      // Keep the client-facing announcement in step with the switch
-      if (inCarousel && !carouselPostId) {
-        const { data: post } = await supabase
-          .from("carousel_posts")
-          .insert({
-            type: "vacaciones",
-            title: reasonLabel(reason).toUpperCase(),
-            description: description.trim() || null,
-            starts_on: startDate,
-            ends_on: endDate,
-            // The exact instant it stops — without this it never expires
-            starts_at: shopDateAt(startDate, "00:00").toISOString(),
-            ends_at: endOfShopDay(endDate).toISOString(),
-            is_active: true,
-          })
-          .select("id")
-          .single();
-        if (post) {
-          await supabase
-            .from("closures")
-            .update({ carousel_post_id: post.id })
-            .eq("id", c.id);
+      if (target.kind === "block") {
+        const starts = dateAt(startDate, toMins(startTime));
+        const ends = dateAt(startDate, toMins(endTime));
+        if (ends <= starts) {
+          setError("La hora de fin debe ser después de la de inicio.");
+          return;
         }
-      } else if (!inCarousel && carouselPostId) {
-        // Drop the link first so the closure never points at a deleted row
-        await supabase.from("closures").update({ carousel_post_id: null }).eq("id", c.id);
-        await supabase.from("carousel_posts").delete().eq("id", carouselPostId);
-      } else if (inCarousel && carouselPostId) {
-        await supabase
-          .from("carousel_posts")
+        const { error: err } = await supabase
+          .from("blocked_times")
           .update({
-            title: reasonLabel(reason).toUpperCase(),
-            description: description.trim() || null,
+            starts_at: starts.toISOString(),
+            ends_at: ends.toISOString(),
+            reason: description.trim() || "Bloqueado",
+          })
+          .eq("id", target.block.id);
+        if (err) {
+          setError(`No se pudo guardar: ${err.message}`);
+          return;
+        }
+      } else {
+        const c = target.closure;
+        if (endDate < startDate) {
+          setError("La fecha final no puede ser antes de la inicial.");
+          return;
+        }
+        const { error: err } = await supabase
+          .from("closures")
+          .update({
             starts_on: startDate,
             ends_on: endDate,
-            starts_at: shopDateAt(startDate, "00:00").toISOString(),
-            ends_at: endOfShopDay(endDate).toISOString(),
+            reason,
+            description: description.trim() || null,
+            start_time: c.all_day ? null : startTime,
+            end_time: c.all_day ? null : endTime,
           })
-          .eq("id", carouselPostId);
-      }
-    }
+          .eq("id", c.id);
+        if (err) {
+          setError(`No se pudo guardar: ${err.message}`);
+          return;
+        }
 
-    setSaving(false);
-    onClose();
-    startTransition(() => router.refresh());
+        // Keep the client-facing announcement in step with the switch
+        if (inCarousel && !carouselPostId) {
+          const { data: post } = await supabase
+            .from("carousel_posts")
+            .insert({
+              type: "vacaciones",
+              title: reasonLabel(reason).toUpperCase(),
+              description: description.trim() || null,
+              starts_on: startDate,
+              ends_on: endDate,
+              // The exact instant it stops — without this it never expires
+              starts_at: shopDateAt(startDate, "00:00").toISOString(),
+              ends_at: endOfShopDay(endDate).toISOString(),
+              is_active: true,
+            })
+            .select("id")
+            .single();
+          if (post) {
+            await supabase
+              .from("closures")
+              .update({ carousel_post_id: post.id })
+              .eq("id", c.id);
+          }
+        } else if (!inCarousel && carouselPostId) {
+          // Drop the link first so the closure never points at a deleted row
+          await supabase.from("closures").update({ carousel_post_id: null }).eq("id", c.id);
+          await supabase.from("carousel_posts").delete().eq("id", carouselPostId);
+        } else if (inCarousel && carouselPostId) {
+          await supabase
+            .from("carousel_posts")
+            .update({
+              title: reasonLabel(reason).toUpperCase(),
+              description: description.trim() || null,
+              starts_on: startDate,
+              ends_on: endDate,
+              starts_at: shopDateAt(startDate, "00:00").toISOString(),
+              ends_at: endOfShopDay(endDate).toISOString(),
+            })
+            .eq("id", carouselPostId);
+        }
+      }
+
+      onClose();
+      startTransition(() => router.refresh());
+    } catch (e) {
+      // Never let a save throw past this component
+      setError(e instanceof Error ? e.message : "No se pudo guardar.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove() {
     setError(null);
     setSaving(true);
-    const supabase = createClient();
 
-    if (target!.kind === "block") {
-      const { error: err } = await supabase
-        .from("blocked_times")
-        .delete()
-        .eq("id", target!.block.id);
-      if (err) {
-        setSaving(false);
-        setError(`No se pudo eliminar: ${err.message}`);
-        return;
-      }
-    } else {
-      // The announcement goes with it; a closure that no longer exists
-      // shouldn't keep telling clients the shop is shut.
-      const { error: err } = await supabase
-        .from("closures")
-        .delete()
-        .eq("id", target!.closure.id);
-      if (!err && target!.closure.carousel_post_id) {
-        await supabase
-          .from("carousel_posts")
+    try {
+      const supabase = createClient();
+
+      if (target.kind === "block") {
+        const { error: err } = await supabase
+          .from("blocked_times")
           .delete()
-          .eq("id", target!.closure.carousel_post_id);
+          .eq("id", target.block.id);
+        if (err) {
+          setError(`No se pudo eliminar: ${err.message}`);
+          return;
+        }
+      } else {
+        // The announcement goes with it; a closure that no longer exists
+        // shouldn't keep telling clients the shop is shut.
+        const { error: err } = await supabase
+          .from("closures")
+          .delete()
+          .eq("id", target.closure.id);
+        if (err) {
+          setError(`No se pudo eliminar: ${err.message}`);
+          return;
+        }
+        if (target.closure.carousel_post_id) {
+          await supabase
+            .from("carousel_posts")
+            .delete()
+            .eq("id", target.closure.carousel_post_id);
+        }
       }
-      if (err) {
-        setSaving(false);
-        setError(`No se pudo eliminar: ${err.message}`);
-        return;
-      }
-    }
 
-    setSaving(false);
-    onClose();
-    startTransition(() => router.refresh());
+      onClose();
+      startTransition(() => router.refresh());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo eliminar.");
+    } finally {
+      setSaving(false);
+    }
   }
 
+  const from = safeDay(startDate);
+  const to = safeDay(endDate);
   const dayCount =
-    Math.round(
-      (new Date(endDate + "T00:00:00").getTime() -
-        new Date(startDate + "T00:00:00").getTime()) /
-        86400000
-    ) + 1;
+    from && to ? Math.round((to.getTime() - from.getTime()) / 86400000) + 1 : 1;
 
   return (
     <Modal
@@ -259,8 +303,8 @@ export function BlockDetailModal({
           <div className="min-w-0">
             <p className="text-sm font-bold text-foreground capitalize">
               {isBlock || startDate === endDate
-                ? format(new Date(startDate + "T00:00:00"), "EEEE d 'de' MMMM", { locale: es })
-                : `${format(new Date(startDate + "T00:00:00"), "d MMM", { locale: es })} – ${format(new Date(endDate + "T00:00:00"), "d MMM yyyy", { locale: es })}`}
+                ? fmtDay(startDate, "EEEE d 'de' MMMM")
+                : `${fmtDay(startDate, "d MMM")} – ${fmtDay(endDate, "d MMM yyyy")}`}
             </p>
             <p className="text-xs text-muted">
               {isBlock
@@ -278,7 +322,7 @@ export function BlockDetailModal({
             <input
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e) => set("startDate", e.target.value)}
               className="form-input"
             />
           </Field>
@@ -288,7 +332,7 @@ export function BlockDetailModal({
                 type="date"
                 value={endDate}
                 min={startDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => set("endDate", e.target.value)}
                 className="form-input"
               />
             </Field>
@@ -302,7 +346,7 @@ export function BlockDetailModal({
               <input
                 type="time"
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={(e) => set("startTime", e.target.value)}
                 className="form-input"
               />
             </Field>
@@ -310,7 +354,7 @@ export function BlockDetailModal({
               <input
                 type="time"
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                onChange={(e) => set("endTime", e.target.value)}
                 className="form-input"
               />
             </Field>
@@ -326,7 +370,7 @@ export function BlockDetailModal({
                 <button
                   key={r.value}
                   type="button"
-                  onClick={() => setReason(r.value)}
+                  onClick={() => set("reason", r.value)}
                   className={cn(
                     "h-[52px] rounded-xl border text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 px-1 transition-colors",
                     reason === r.value
@@ -347,7 +391,7 @@ export function BlockDetailModal({
             rows={2}
             maxLength={400}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => set("description", e.target.value)}
             placeholder={isBlock ? "Ej. cita médica" : "Lo que verán tus clientes"}
             className="form-input resize-none"
           />
@@ -369,7 +413,7 @@ export function BlockDetailModal({
             </div>
             <Switch
               checked={inCarousel}
-              onChange={() => setInCarousel((v) => !v)}
+              onChange={() => set("inCarousel", !inCarousel)}
               label="Mostrar en el carrusel"
             />
           </div>

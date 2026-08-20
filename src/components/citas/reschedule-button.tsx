@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { CalendarClock } from "lucide-react";
 import { RescheduleModal } from "./reschedule-modal";
-import type { AvailabilityDay } from "@/lib/data/availability";
+import type { AvailabilityDay, BookingSettings } from "@/lib/data/availability";
+import type { ClosureRange } from "@/lib/data/appointments";
 
 interface ServiceOption {
   id: string;
@@ -20,6 +21,9 @@ export function RescheduleButton({
   currentEndsAt,
   services,
   availability,
+  closures = [],
+  bookingSettings,
+  extraMinutes = 0,
 }: {
   appointmentId: string;
   currentServiceId: string;
@@ -27,6 +31,9 @@ export function RescheduleButton({
   currentEndsAt: string;
   services: ServiceOption[];
   availability: AvailabilityDay[];
+  closures?: ClosureRange[];
+  bookingSettings: BookingSettings;
+  extraMinutes?: number;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -47,6 +54,9 @@ export function RescheduleButton({
         currentEndsAt={currentEndsAt}
         services={services}
         availability={availability}
+        closures={closures}
+        bookingSettings={bookingSettings}
+        extraMinutes={extraMinutes}
       />
     </>
   );

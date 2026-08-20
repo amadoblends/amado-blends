@@ -25,57 +25,18 @@ import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { toMins, fromMins, fmtHHMM as fmtSlot, dateAt } from "@/lib/time";
 import { shopDateAt } from "@/lib/timezone";
 import type { AvailabilityDay, BookingSettings } from "@/lib/data/availability";
+import type { ClosureRange } from "@/lib/data/appointments";
+import {
+  availableSlots,
+  isDayClosed,
+  type BusyInterval,
+  type ClosureLike,
+} from "@/lib/availability-slots";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const WEEK_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
 
-interface BusyInterval {
-  start: number; // epoch ms
-  end: number;
-}
-
-/**
- * Bookable start times for one day.
- *
- * A slot survives only if the whole service fits inside working hours, clears
- * the break, doesn't collide with anything already booked or blocked (padded
- * by the configured buffer on both sides), and hasn't already passed —
- * including the minimum notice the barber configured.
- */
-function generateSlots(
-  day: AvailabilityDay,
-  durMins: number,
-  dateStr: string,
-  busy: BusyInterval[],
-  opts: { bufferMinutes: number; minNoticeMinutes: number }
-): string[] {
-  if (!day.is_active) return [];
-  const start = toMins(day.start_time);
-  const end = toMins(day.end_time);
-  const step = day.slot_minutes;
-  const bS = day.break_start_time ? toMins(day.break_start_time) : null;
-  const bE = day.break_end_time ? toMins(day.break_end_time) : null;
-
-  const bufferMs = opts.bufferMinutes * 60000;
-  // Anything starting before this instant is in the past for booking purposes
-  const earliestMs = Date.now() + opts.minNoticeMinutes * 60000;
-
-  const out: string[] = [];
-  for (let t = start; t + durMins <= end; t += step) {
-    if (bS !== null && bE !== null && t < bE && t + durMins > bS) continue;
-
-    const sMs = dateAt(dateStr, t).getTime();
-    if (sMs < earliestMs) continue;
-
-    const eMs = sMs + durMins * 60000;
-    // Pad the candidate, not the existing rows, so the buffer applies both ways
-    if (busy.some((b) => sMs - bufferMs < b.end && eMs + bufferMs > b.start)) continue;
-
-    out.push(fromMins(t));
-  }
-  return out;
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,6 +75,7 @@ export function AppointmentWizard({
   services,
   availability,
   bookingSettings,
+  closures = [],
   defaultDate,
   defaultTime,
   entry = "type",
@@ -124,6 +86,8 @@ export function AppointmentWizard({
   services: ServiceOption[];
   availability: AvailabilityDay[];
   bookingSettings: BookingSettings;
+  /** Holidays and vacations, so a closed day is never offered. */
+  closures?: ClosureRange[];
   defaultDate: string;
   defaultTime?: string;
   /**
@@ -207,15 +171,26 @@ export function AppointmentWizard({
   }, [data.date, step]);
 
   const dayAvail = getDayAvail(data.date);
-  const slots =
-    data.service && dayAvail
-      ? generateSlots(dayAvail, data.service.duration_minutes, data.date, busy, {
+  /*
+   * The shared rule, identical to what reschedule and both client screens
+   * ask — so a time offered here is a time every other screen agrees exists.
+   */
+  const slots = data.service
+    ? availableSlots({
+        dateStr: data.date,
+        day: dayAvail,
+        // This flow has no product step, so nothing lengthens the visit
+        durationMinutes: data.service.duration_minutes,
+        busy,
+        closures: closures as ClosureLike[],
+        rules: {
           bufferMinutes: bookingSettings.buffer_minutes,
           // The barber books in person, so their own minimum notice is zero;
           // the setting exists to stop clients booking a minute in advance.
           minNoticeMinutes: 0,
-        })
-      : [];
+        },
+      })
+    : [];
 
   function reset() {
     setStep(entry);
@@ -507,9 +482,11 @@ export function AppointmentWizard({
               }).map((d) => {
                 const wd = d.getDay();
                 const inMonth = isSameMonth(d, calCursor);
+                // Vacations grey out here rather than opening to an empty list
                 const disabled =
                   !activeWeekdays.has(wd) ||
-                  isBefore(startOfDay(d), startOfDay(new Date()));
+                  isBefore(startOfDay(d), startOfDay(new Date())) ||
+                  isDayClosed(format(d, "yyyy-MM-dd"), closures as ClosureLike[]);
                 const isSelected = isSameDay(d, new Date(data.date + "T00:00:00"));
                 const isToday = isSameDay(d, new Date());
 

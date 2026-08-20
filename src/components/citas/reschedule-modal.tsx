@@ -13,8 +13,15 @@ import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 import { rescheduleAppointment } from "@/lib/actions/appointments";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
-import type { AvailabilityDay } from "@/lib/data/availability";
-import { shopDateAt, shopTime, shopFormat } from "@/lib/timezone";
+import type { AvailabilityDay, BookingSettings } from "@/lib/data/availability";
+import type { ClosureRange } from "@/lib/data/appointments";
+import { shopDateAt, shopFormat } from "@/lib/timezone";
+import {
+  availableSlots,
+  isDayClosed,
+  type BusyInterval,
+  type ClosureLike,
+} from "@/lib/availability-slots";
 
 const WEEK_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
 
@@ -26,18 +33,6 @@ interface ServiceOption {
   color: string;
 }
 
-interface BusyInterval {
-  start: number;
-  end: number;
-}
-
-function toMins(t: string) {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-function fromMins(t: number) {
-  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
-}
 function fmtSlot(hhmm: string) {
   const [h, m] = hhmm.split(":").map(Number);
   const p = h >= 12 ? "PM" : "AM";
@@ -54,6 +49,9 @@ export function RescheduleModal({
   currentEndsAt,
   services,
   availability,
+  closures = [],
+  bookingSettings,
+  extraMinutes = 0,
 }: {
   open: boolean;
   onClose: () => void;
@@ -63,6 +61,11 @@ export function RescheduleModal({
   currentEndsAt: string;
   services: ServiceOption[];
   availability: AvailabilityDay[];
+  /** Holidays and vacations, so closed days can't be offered. */
+  closures?: ClosureRange[];
+  bookingSettings: BookingSettings;
+  /** Minutes the booked products add on top of the service. */
+  extraMinutes?: number;
 }) {
   const router = useRouter();
   const current = new Date(currentStartsAt);
@@ -114,25 +117,30 @@ export function RescheduleModal({
     };
   }, [date, open, currentStartsAt, currentEndsAt]);
 
+  /*
+   * One source of truth for what can be booked — the same call the new
+   * appointment wizard and both client screens make. This screen used to work
+   * it out on its own and got it wrong in five ways: no buffer, no minimum
+   * notice, no closures, no product minutes, and it happily offered times that
+   * had already gone.
+   */
   const slots = useMemo(() => {
-    if (!dayAvail || !service) return [];
-    const start = toMins(dayAvail.start_time);
-    const end = toMins(dayAvail.end_time);
-    const step = dayAvail.slot_minutes;
-    const bS = dayAvail.break_start_time ? toMins(dayAvail.break_start_time) : null;
-    const bE = dayAvail.break_end_time ? toMins(dayAvail.break_end_time) : null;
-    const dur = service.duration_minutes;
-    const [y, mo, d] = date.split("-").map(Number);
-    const out: string[] = [];
-    for (let t = start; t + dur <= end; t += step) {
-      if (bS !== null && bE !== null && t < bE && t + dur > bS) continue;
-      const sMs = new Date(y, mo - 1, d, Math.floor(t / 60), t % 60, 0).getTime();
-      const eMs = sMs + dur * 60000;
-      if (busy.some((b) => sMs < b.end && eMs > b.start)) continue;
-      out.push(fromMins(t));
-    }
-    return out;
-  }, [dayAvail, service, date, busy]);
+    if (!service) return [];
+    return availableSlots({
+      dateStr: date,
+      day: dayAvail,
+      // Products that lengthen the visit count towards fitting it in
+      durationMinutes: service.duration_minutes + extraMinutes,
+      busy,
+      closures: closures as ClosureLike[],
+      rules: {
+        bufferMinutes: bookingSettings.buffer_minutes,
+        // The barber reschedules in person; the notice exists to stop clients
+        // booking a minute ahead, not to restrain the barber.
+        minNoticeMinutes: 0,
+      },
+    });
+  }, [dayAvail, service, date, busy, closures, bookingSettings, extraMinutes]);
 
   function handleSave() {
     if (!time || !service) return;
@@ -231,14 +239,20 @@ export function RescheduleModal({
             }).map((d) => {
               const wd = d.getDay();
               const inMonth = isSameMonth(d, calCursor);
-              const disabled = !activeWeekdays.has(wd) || isBefore(startOfDay(d), today);
+              const key = format(d, "yyyy-MM-dd");
+              // A vacation day is greyed out here rather than opening to an
+              // empty list of times
+              const disabled =
+                !activeWeekdays.has(wd) ||
+                isBefore(startOfDay(d), today) ||
+                isDayClosed(key, closures as ClosureLike[]);
               const isSelected = isSameDay(d, new Date(date + "T00:00:00"));
               return (
                 <button
                   key={d.toISOString()}
                   onClick={() => {
                     if (!disabled) {
-                      setDate(format(d, "yyyy-MM-dd"));
+                      setDate(key);
                       setTime("");
                     }
                   }}
