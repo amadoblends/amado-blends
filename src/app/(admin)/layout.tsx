@@ -22,8 +22,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .eq("id", 1)
     .maybeSingle();
 
-  // Shared with every page below via React cache — one verification per request
-  const user = await getUser();
+  /*
+   * Identity and role go out together.
+   *
+   * They were awaited one after the other, which put two Supabase round trips
+   * — 100–250ms each from Vercel — in front of everything else on *every*
+   * navigation, and again on every realtime refresh. Neither needs the other:
+   * my_roles() answers from auth.uid() on the server side.
+   */
+  const [user, roles] = await Promise.all([getUser(), getRoles()]);
 
   /*
    * The gate. Being signed in was never enough — this panel used to admit any
@@ -31,7 +38,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
    * The role comes from the database, and RLS refuses the rows underneath
    * regardless, so this is the message rather than the defence.
    */
-  const roles = await getRoles();
   if (user && !allowedIn(roles, "barber")) {
     return <WrongApp message={wrongAppMessage(roles, "barber")} />;
   }

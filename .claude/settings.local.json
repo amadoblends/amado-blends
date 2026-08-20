@@ -133,7 +133,12 @@
       "Bash(python -)",
       "Bash(npx tsx *)",
       "Bash(rm -rf .tmp)",
-      "Bash(node .tmp/nav.test.mjs)"
+      "Bash(node .tmp/nav.test.mjs)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(awk '{printf \"%7.0f KB %s\\\\n\", $1/1024, $2}')",
+      "Bash(awk '{s+=$1} END {printf \"%.0f KB en %d archivos\\\\n\", s/1024, NR}')",
+      "Bash(xargs echo \"  archivos:\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(' ',k,v\\) for k,v in sorted\\(d.get\\('dependencies',{}\\).items\\(\\)\\)]\")"
     ]
   }
 }

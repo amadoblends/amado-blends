@@ -7,6 +7,7 @@ import {
 } from "@/lib/data/appointments";
 import { BackButton } from "@/components/ui/back-button";
 import { BlocksManager } from "@/components/citas/blocks-manager";
+import { shopToday } from "@/lib/timezone";
 
 /**
  * "Disponibilidad y bloqueos" — the home for blocking hours and closing whole
@@ -20,7 +21,7 @@ export default async function BloqueosPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const params = await searchParams;
-  const dateStr = params.date ?? format(new Date(), "yyyy-MM-dd");
+  const dateStr = params.date ?? shopToday();
   const date = new Date(dateStr + "T00:00:00");
 
   const [availability, appointments, blockedTimes, closures] = await Promise.all([

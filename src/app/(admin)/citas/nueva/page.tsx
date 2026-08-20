@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { getAvailability } from "@/lib/data/availability";
 import { NewAppointmentForm } from "@/components/citas/new-appointment-form";
+import { shopToday } from "@/lib/timezone";
 
 export default async function NewAppointmentPage({
   searchParams,
@@ -34,7 +35,7 @@ export default async function NewAppointmentPage({
       <NewAppointmentForm
         clients={clients ?? []}
         services={services ?? []}
-        defaultDate={params.date ?? format(new Date(), "yyyy-MM-dd")}
+        defaultDate={params.date ?? shopToday()}
         availability={availability}
       />
     </div>

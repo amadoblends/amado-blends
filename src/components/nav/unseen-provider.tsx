@@ -64,11 +64,30 @@ export function UnseenProvider({
       .then(() => undefined);
   }, [pathname]);
 
-  // New arrivals while the barber is looking at something else
+  /*
+   * The server already recomputes these on every render, and the calendar's
+   * RealtimeRefresher makes the route re-render whenever an appointment
+   * changes — so `initial` arrives fresh without this component asking for
+   * anything. Following it is free.
+   *
+   * This used to open its own socket on `appointments` as well, which meant
+   * the dashboard and the calendar each ran TWO channels on the same table:
+   * one booking woke both, one doing a full route refresh and the other an
+   * RPC for the same numbers.
+   */
+  useEffect(() => {
+    setCounts(initial);
+  }, [initial.citas, initial.feedback]);
+
+  /*
+   * Only feedback keeps a socket. Nothing else refreshes the route when a
+   * client writes one, and they are rare enough that a channel for them costs
+   * nothing.
+   */
   useEffect(() => {
     const supabase = createClient();
     let cancelled = false;
-    const channel = supabase.channel(`unseen-${Math.random().toString(36).slice(2, 8)}`);
+    const channel = supabase.channel(`unseen-feedback-${Math.random().toString(36).slice(2, 8)}`);
 
     (async () => {
       const {
@@ -78,11 +97,6 @@ export function UnseenProvider({
       if (session?.access_token) supabase.realtime.setAuth(session.access_token);
 
       channel
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "appointments" },
-          () => refetch()
-        )
         .on(
           "postgres_changes",
           { event: "INSERT", schema: "public", table: "feedback" },

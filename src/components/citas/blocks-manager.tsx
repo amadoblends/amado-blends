@@ -16,6 +16,7 @@ import type {
   BlockedRange,
   ClosureRange,
 } from "@/lib/data/appointments";
+import { shopToday } from "@/lib/timezone";
 
 /**
  * Everything that takes time off the calendar, in one place: block hours on a
@@ -41,7 +42,7 @@ export function BlocksManager({
   const [removing, setRemoving] = useState<string | null>(null);
 
   // Past closures are noise; the barber only acts on what's still ahead
-  const todayKey = format(new Date(), "yyyy-MM-dd");
+  const todayKey = shopToday();
   const upcoming = closures
     .filter((c) => c.ends_on >= todayKey)
     .sort((a, b) => a.starts_on.localeCompare(b.starts_on));

@@ -6,6 +6,7 @@ import { addDays, format } from "date-fns";
 import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { CalendarPicker } from "@/components/citas/calendar-picker";
+import { shopToday } from "@/lib/timezone";
 
 export function DayNav({
   date,
@@ -19,7 +20,7 @@ export function DayNav({
   const router = useRouter();
   const [pickerOpen, setPickerOpen] = useState(false);
   const current = new Date(date + "T00:00:00");
-  const isToday = format(new Date(), "yyyy-MM-dd") === date;
+  const isToday = shopToday() === date;
 
   function go(delta: number) {
     router.push(`/citas?date=${format(addDays(current, delta), "yyyy-MM-dd")}`);

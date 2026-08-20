@@ -2,6 +2,7 @@ import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, en
 import { getAppointmentsHistory } from "@/lib/data/appointments";
 import { HistoryView, type Period } from "@/components/historial/history-view";
 import { BackButton } from "@/components/ui/back-button";
+import { shopToday } from "@/lib/timezone";
 
 export default async function HistorialPage({
   searchParams,
@@ -10,7 +11,7 @@ export default async function HistorialPage({
 }) {
   const params = await searchParams;
   const period: Period = params.period === "mes" || params.period === "ano" ? params.period : "dia";
-  const dateStr = params.date ?? format(new Date(), "yyyy-MM-dd");
+  const dateStr = params.date ?? shopToday();
   const anchor = new Date(dateStr + "T00:00:00");
   const status = params.status ?? "todas";
 

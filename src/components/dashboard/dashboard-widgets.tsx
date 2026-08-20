@@ -1,5 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
+
 import { useState, useEffect, useRef, useTransition } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -9,8 +11,34 @@ import {
 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/badge";
-import { RevenueChart } from "@/components/dashboard/revenue-chart";
-import { AppointmentsDonut } from "@/components/dashboard/appointments-donut";
+/*
+ * Recharts is around 200KB, and it sits on the dashboard — the screen the
+ * barber lands on. Loading it with the route meant the numbers, today's
+ * appointments and the whole page waited on a charting library to arrive
+ * before anything could paint.
+ *
+ * Split out, the dashboard renders immediately and the two charts fade in a
+ * moment later behind a placeholder of their own height, so nothing jumps.
+ */
+const RevenueChart = dynamic(
+  () => import("@/components/dashboard/revenue-chart").then((m) => m.RevenueChart),
+  { loading: () => <ChartSkeleton height={180} /> }
+);
+const AppointmentsDonut = dynamic(
+  () => import("@/components/dashboard/appointments-donut").then((m) => m.AppointmentsDonut),
+  { loading: () => <ChartSkeleton height={160} /> }
+);
+
+/** Holds the chart's exact space so the layout doesn't shift when it lands. */
+function ChartSkeleton({ height }: { height: number }) {
+  return (
+    <div
+      aria-hidden
+      className="w-full rounded-xl bg-background animate-pulse"
+      style={{ height }}
+    />
+  );
+}
 import { RealtimeRefresher } from "@/components/realtime/realtime-refresher";
 import { saveDashboardLayout } from "@/lib/actions/dashboard";
 import { formatCurrency, cn } from "@/lib/utils";

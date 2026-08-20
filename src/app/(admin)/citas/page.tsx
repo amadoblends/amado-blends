@@ -14,6 +14,7 @@ import {
 } from "@/lib/data/appointments";
 import { getAvailability, getBookingSettings } from "@/lib/data/availability";
 import { createClient } from "@/lib/supabase/server";
+import { shopToday } from "@/lib/timezone";
 import { CalendarShell } from "@/components/citas/calendar-shell";
 import type { CalendarView } from "@/components/citas/calendar-toolbar";
 
@@ -39,7 +40,12 @@ export default async function CitasPage({
   searchParams: Promise<{ date?: string; view?: string }>;
 }) {
   const params = await searchParams;
-  const dateStr = params.date ?? format(new Date(), "yyyy-MM-dd");
+  /*
+   * The shop's today, not the server's. Vercel runs in UTC, so after 8pm in
+   * Puerto Rico `new Date()` is already tomorrow there — the calendar opened
+   * on the wrong day every evening.
+   */
+  const dateStr = params.date ?? shopToday();
   const date = new Date(dateStr + "T00:00:00");
   const view = (["day", "week", "month", "year"].includes(params.view ?? "")
     ? params.view
