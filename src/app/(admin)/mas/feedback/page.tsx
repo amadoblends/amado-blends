@@ -9,11 +9,32 @@ export const dynamic = "force-dynamic";
 export default async function FeedbackPage() {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  /*
+   * The visit link arrives with migration 36. Naming a column that isn't
+   * there fails the WHOLE query, which would empty the inbox rather than
+   * show it without the visit line — so it falls back to the older shape.
+   */
+  const BASE = "id, area, category, message, rating, status, created_at, clients(full_name)";
+  const WITH_VISIT = `${BASE}, appointment_id, appointments(starts_at, services(name))`;
+
+  // The two shapes differ, so the rows are read defensively below
+  const first = await supabase
     .from("feedback")
-    .select("id, area, category, message, rating, status, created_at, clients(full_name)")
+    .select(WITH_VISIT)
     .order("created_at", { ascending: false })
     .limit(200);
+
+  const fallback =
+    first.error && diagnose(first.error).kind === "missing-column"
+      ? await supabase
+          .from("feedback")
+          .select(BASE)
+          .order("created_at", { ascending: false })
+          .limit(200)
+      : null;
+
+  const data = (fallback ?? first).data as Record<string, unknown>[] | null;
+  const error = (fallback ?? first).error;
 
   // The table arrives with migration 29; until it's run, say so plainly
   // instead of rendering an empty inbox that looks like silence.
@@ -21,20 +42,29 @@ export default async function FeedbackPage() {
 
   const items: FeedbackItem[] = (data ?? []).map((row) => {
     // PostgREST types the embed as an array even though the FK is to one row
-    const joined = row.clients as unknown as
+    const joined = row.clients as
       | { full_name: string | null }
       | { full_name: string | null }[]
       | null;
     const client = Array.isArray(joined) ? joined[0] : joined;
     return {
-      id: row.id,
-      area: row.area,
+      id: row.id as string,
+      area: row.area as FeedbackItem["area"],
       // Categories arrive with migration 32; older rows read as "other"
-      category: row.category ?? null,
-      message: row.message,
-      rating: row.rating,
-      status: row.status,
-      created_at: row.created_at,
+      category: (row.category as string | null) ?? null,
+      // Which visit the stars are about — see migration 36
+      visit: (() => {
+        const a = row.appointments as
+          | { starts_at: string; services: { name: string } | { name: string }[] | null }
+          | null;
+        if (!a) return null;
+        const svc = Array.isArray(a.services) ? a.services[0] : a.services;
+        return { startsAt: a.starts_at, serviceName: svc?.name ?? null };
+      })(),
+      message: row.message as string,
+      rating: row.rating as number | null,
+      status: row.status as FeedbackItem["status"],
+      created_at: row.created_at as string,
       client_name: client?.full_name ?? null,
     };
   });

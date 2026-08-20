@@ -29,6 +29,8 @@ export interface FeedbackItem {
   status: "new" | "read" | "archived";
   created_at: string;
   client_name: string | null;
+  /** The visit being rated, when the comment came from the rating prompt. */
+  visit: { startsAt: string; serviceName: string | null } | null;
 }
 
 type Tab = "new" | "read" | "archived";
@@ -158,12 +160,26 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                   </p>
                 </div>
                 {f.rating !== null && (
-                  <span className="flex items-center gap-0.5 shrink-0">
-                    <Star size={13} className="text-brand fill-brand" />
-                    <span className="text-sm font-bold text-foreground">{f.rating}</span>
+                  <span className="flex items-center gap-0.5 shrink-0" title={`${f.rating}/5`}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star
+                        key={n}
+                        size={12}
+                        className={cn(
+                          n <= f.rating! ? "text-brand fill-brand" : "text-border"
+                        )}
+                      />
+                    ))}
                   </span>
                 )}
               </div>
+
+              {/* Which haircut the stars are about */}
+              {f.visit && (
+                <p className="text-[11px] text-muted bg-background rounded-lg px-2.5 py-1.5">
+                  {f.visit.serviceName ?? "Cita"} · {shopLongDate(f.visit.startsAt)}
+                </p>
+              )}
 
               <button
                 type="button"
