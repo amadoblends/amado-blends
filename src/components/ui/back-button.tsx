@@ -1,33 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
+import { useAppNavigation } from "@/components/nav/navigation-history";
 
 /**
  * Goes back the way the barber actually came.
  *
- * `router.back()` alone walks raw browser history, which sends you somewhere
- * unrelated when the page was opened directly, after a refresh, or from a
- * notification — there is no in-app entry behind it to return to. When that's
- * the case we go to `fallback` instead, which is the section this screen
- * genuinely belongs under.
+ * The decision lives in NavigationHistoryProvider, which records the route
+ * path as it's walked. This button only asks it to step back — and when there
+ * is nothing of ours behind, that provider lands on the dashboard rather than
+ * out of the app.
+ *
+ * `fallback` is kept for the few screens that want somewhere other than the
+ * dashboard when there's no history, but it is deliberately the exception:
+ * the point of the provider is that Back doesn't need to be told.
  */
-export function BackButton({ fallback = "/" }: { fallback?: string }) {
-  const router = useRouter();
-  const [canGoBack, setCanGoBack] = useState(true);
-
-  useEffect(() => {
-    // A fresh tab or a hard load leaves nothing of ours to pop back to
-    const entries = window.history.length;
-    const cameFromApp =
-      document.referrer === "" ? entries > 1 : document.referrer.startsWith(window.location.origin);
-    setCanGoBack(entries > 1 && cameFromApp);
-  }, []);
+export function BackButton({ fallback }: { fallback?: string }) {
+  const { back } = useAppNavigation();
 
   return (
     <button
-      onClick={() => (canGoBack ? router.back() : router.push(fallback))}
+      onClick={() => back(fallback)}
       aria-label="Volver"
       className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center shrink-0 active:bg-background"
     >

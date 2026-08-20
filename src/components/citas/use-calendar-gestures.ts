@@ -111,33 +111,61 @@ export function usePinchZoom({
 
 export interface DragState {
   appointmentId: string;
-  /** Where it would land, in minutes from midnight. */
+  /** Where a drop would land, snapped, in minutes from midnight. */
   proposedMins: number;
   durationMins: number;
   valid: boolean;
   reason?: string;
 }
 
+interface PressState {
+  id: string;
+  durationMins: number;
+  originMins: number;
+  /** Finger position in *page* coordinates, so scrolling can't shift it. */
+  startPageY: number;
+  lastPageY: number;
+  armed: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
+  frame: number;
+  /** Latest snapped position — what a drop would commit. */
+  snappedMins: number;
+  lastValid: boolean | null;
+  /** Auto-scroll while the finger rests in an edge zone. */
+  edgeTimer: ReturnType<typeof setInterval> | null;
+  edgeStep: number;
+}
+
 /**
  * Long-press then drag to move an appointment.
  *
- * The press has to be held before the drag arms, so scrolling the day never
- * picks a card up by accident. While dragging, the proposed time snaps to the
- * configured increment and is validated on every step — an invalid target is
- * shown as invalid and refuses the drop rather than failing after the fact.
+ * ── Following the finger ─────────────────────────────────────────────────
+ * The card's position is written straight to the DOM as a transform inside a
+ * requestAnimationFrame, not through React state. Re-rendering the whole
+ * timeline on every touchmove is what made the block trail behind the finger:
+ * React has to reconcile a day's worth of cards before the ghost moves a
+ * single pixel. Now the pixels move first and React finds out afterwards,
+ * only when the snapped time actually changes.
+ *
+ * The visual follows the finger *exactly* — it is not snapped. Only the time
+ * a drop would commit to is snapped, and that is what the ghost's label
+ * shows. Snapping the visual was the other half of the jumpiness: the card
+ * lurched between increments instead of tracking the hand.
+ *
+ * Every position is held in page coordinates, so scrolling — the edge
+ * auto-scroll, or anything the browser does on its own — moves the calendar
+ * under a card that stays put under the finger.
  */
 export function useAppointmentDrag({
   hourH,
   dayStartMins,
   snapMinutes,
-  containerRef,
   validate,
   onDrop,
 }: {
   hourH: number;
   dayStartMins: number;
   snapMinutes: number;
-  containerRef: React.RefObject<HTMLDivElement | null>;
   /** Whether the appointment may start at these minutes. */
   validate: (startMins: number, durationMins: number, appointmentId: string) => {
     ok: boolean;
@@ -147,19 +175,23 @@ export function useAppointmentDrag({
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
 
-  const press = useRef<{
-    id: string;
-    durationMins: number;
-    originMins: number;
-    startY: number;
-    timer: ReturnType<typeof setTimeout> | null;
-    armed: boolean;
-  } | null>(null);
+  /** The ghost element, moved directly rather than re-rendered. */
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const press = useRef<PressState | null>(null);
 
-  const lastValid = useRef<boolean | null>(null);
+  const clearEdgeScroll = useCallback(() => {
+    const p = press.current;
+    if (p?.edgeTimer) {
+      clearInterval(p.edgeTimer);
+      p.edgeTimer = null;
+    }
+  }, []);
 
   const cancelPress = useCallback(() => {
-    if (press.current?.timer) clearTimeout(press.current.timer);
+    const p = press.current;
+    if (p?.timer) clearTimeout(p.timer);
+    if (p?.frame) cancelAnimationFrame(p.frame);
+    if (p?.edgeTimer) clearInterval(p.edgeTimer);
     press.current = null;
   }, []);
 
@@ -168,22 +200,81 @@ export function useAppointmentDrag({
     [snapMinutes]
   );
 
+  /**
+   * Recomputes from the current finger position and paints.
+   *
+   * Separate from the touch handler because the edge auto-scroll re-runs it
+   * on a timer: the finger can be holding still while the page moves, and the
+   * card has to keep tracking the finger through that.
+   */
+  const apply = useCallback(() => {
+    const p = press.current;
+    if (!p?.armed) return;
+
+    const movedMins = ((p.lastPageY - p.startPageY) / hourH) * 60;
+    const latest = p.originMins + movedMins;
+
+    // Kept inside the day, leaving room for the whole appointment
+    const upperBound = 24 * 60 - p.durationMins;
+    const raw = Math.max(dayStartMins, Math.min(upperBound, latest));
+    const snapped = Math.max(dayStartMins, Math.min(upperBound, snap(raw)));
+
+    // The pixels move now, on their own frame, ahead of any React work
+    if (p.frame) cancelAnimationFrame(p.frame);
+    p.frame = requestAnimationFrame(() => {
+      const el = ghostRef.current;
+      if (el) {
+        const px = ((raw - dayStartMins) / 60) * hourH;
+        el.style.transform = `translate3d(0, ${px}px, 0)`;
+      }
+      if (press.current) press.current.frame = 0;
+    });
+
+    // React only hears about it when the committed time would change
+    if (snapped === p.snappedMins) return;
+    p.snappedMins = snapped;
+
+    const v = validate(snapped, p.durationMins, p.id);
+    // One tick when crossing between valid and invalid, not on every pixel
+    if (p.lastValid !== null && v.ok !== p.lastValid) haptic(v.ok ? 10 : [4, 30, 4]);
+    p.lastValid = v.ok;
+
+    setDrag((prev) =>
+      prev && prev.proposedMins === snapped && prev.valid === v.ok
+        ? prev
+        : {
+            appointmentId: p.id,
+            proposedMins: snapped,
+            durationMins: p.durationMins,
+            valid: v.ok,
+            reason: v.reason,
+          }
+    );
+  }, [hourH, dayStartMins, snap, validate]);
+
   const onTouchStart = useCallback(
     (e: React.TouchEvent, appointmentId: string, startMins: number, durationMins: number) => {
       if (e.touches.length !== 1) return;
-      const y = e.touches[0].clientY;
+      const pageY = e.touches[0].clientY + window.scrollY;
 
       press.current = {
         id: appointmentId,
         durationMins,
         originMins: startMins,
-        startY: y,
+        startPageY: pageY,
+        lastPageY: pageY,
         armed: false,
+        frame: 0,
+        snappedMins: startMins,
+        lastValid: null,
+        edgeTimer: null,
+        edgeStep: 0,
         timer: setTimeout(() => {
-          if (!press.current) return;
-          press.current.armed = true;
+          const p = press.current;
+          if (!p) return;
+          p.armed = true;
           const v = validate(startMins, durationMins, appointmentId);
-          lastValid.current = v.ok;
+          p.lastValid = v.ok;
           setDrag({
             appointmentId,
             proposedMins: startMins,
@@ -201,72 +292,59 @@ export function useAppointmentDrag({
   const onTouchMove = useCallback(
     (e: React.TouchEvent) => {
       const p = press.current;
-      if (!p) return;
+      if (!p || e.touches.length !== 1) return;
 
-      const y = e.touches[0].clientY;
-      const dy = y - p.startY;
+      const viewportY = e.touches[0].clientY;
+      const pageY = viewportY + window.scrollY;
 
       // Before the long press completes, any real movement is a scroll
       if (!p.armed) {
-        if (Math.abs(dy) > 8) cancelPress();
+        if (Math.abs(pageY - p.startPageY) > 8) cancelPress();
         return;
       }
 
       // Armed: this gesture belongs to the drag, not to the page
       e.preventDefault();
+      p.lastPageY = pageY;
 
       /*
-       * Auto-scroll only near the edges, and at a speed proportional to how
-       * far into the edge zone the finger is.
-       *
-       * Letting the page scroll freely during a drag made the card and the
-       * calendar move at once, so the appointment never went where it looked
-       * like it was going.
+       * Auto-scroll only near the top and bottom edges, at a speed set by how
+       * far into the edge zone the finger is. It runs on an interval rather
+       * than off touchmove, so it keeps going while the finger holds still
+       * against the edge.
        */
       const EDGE = 90;
-      const top = y;
-      const bottom = window.innerHeight - y;
-      let scrollStep = 0;
-      if (top < EDGE) scrollStep = -Math.round(((EDGE - top) / EDGE) * 14);
-      else if (bottom < EDGE) scrollStep = Math.round(((EDGE - bottom) / EDGE) * 14);
+      const overTop = EDGE - viewportY;
+      const overBottom = EDGE - (window.innerHeight - viewportY);
+      p.edgeStep =
+        overTop > 0
+          ? -Math.round((overTop / EDGE) * 12)
+          : overBottom > 0
+            ? Math.round((overBottom / EDGE) * 12)
+            : 0;
 
-      if (scrollStep !== 0) {
-        window.scrollBy(0, scrollStep);
-        // The rail moved under the finger, so the origin has to move with it
-        p.startY -= scrollStep;
+      if (p.edgeStep === 0) {
+        clearEdgeScroll();
+      } else if (!p.edgeTimer) {
+        p.edgeTimer = setInterval(() => {
+          const cur = press.current;
+          if (!cur?.armed || cur.edgeStep === 0) return;
+          window.scrollBy(0, cur.edgeStep);
+          // The finger hasn't moved; the page under it has
+          cur.lastPageY += cur.edgeStep;
+          apply();
+        }, 16);
       }
 
-      const movedMins = ((y - p.startY) / hourH) * 60;
-      const proposed = Math.max(
-        dayStartMins,
-        Math.min(24 * 60 - p.durationMins, snap(p.originMins + movedMins))
-      );
-
-      const v = validate(proposed, p.durationMins, p.id);
-      // One tick when crossing between valid and invalid, not on every pixel
-      if (lastValid.current !== null && v.ok !== lastValid.current) haptic(v.ok ? 10 : [4, 30, 4]);
-      lastValid.current = v.ok;
-
-      setDrag((prev) =>
-        prev && prev.proposedMins === proposed && prev.valid === v.ok
-          ? prev
-          : {
-              appointmentId: p.id,
-              proposedMins: proposed,
-              durationMins: p.durationMins,
-              valid: v.ok,
-              reason: v.reason,
-            }
-      );
+      apply();
     },
-    [hourH, dayStartMins, snap, validate, cancelPress]
+    [cancelPress, clearEdgeScroll, apply]
   );
 
   const onTouchEnd = useCallback(() => {
     const p = press.current;
     const d = drag;
     cancelPress();
-    lastValid.current = null;
 
     if (!p?.armed || !d) {
       setDrag(null);
@@ -283,5 +361,5 @@ export function useAppointmentDrag({
     setDrag(null);
   }, [drag, cancelPress, onDrop]);
 
-  return { drag, onTouchStart, onTouchMove, onTouchEnd, cancelPress };
+  return { drag, ghostRef, onTouchStart, onTouchMove, onTouchEnd, cancelPress };
 }

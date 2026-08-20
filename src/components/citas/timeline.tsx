@@ -361,13 +361,13 @@ function DayTimelineBase({
 
   const {
     drag,
+    ghostRef,
     onTouchStart: onCardTouchStart,
     ...dragHandlers
   } = useAppointmentDrag({
     hourH,
     dayStartMins: workStart ?? 0,
     snapMinutes,
-    containerRef: railRef,
     validate: canLandAt,
     onDrop: (id, startMins) => onMoveAppointment?.(id, fromMins(startMins)),
   });
@@ -735,6 +735,7 @@ function DayTimelineBase({
             */}
           {drag && (
             <div
+              ref={ghostRef}
               className={cn(
                 "absolute left-0 right-0 rounded-xl border-2 z-30 pointer-events-none flex items-center justify-between px-3",
                 drag.valid
@@ -742,8 +743,16 @@ function DayTimelineBase({
                   : "border-danger bg-danger-light"
               )}
               style={{
-                top: y(drag.proposedMins),
+                /*
+                 * Anchored at the top of the rail and moved by a transform the
+                 * drag hook writes on every frame. `top` would go through
+                 * React and arrive a render late — which is what made the card
+                 * lag behind the finger.
+                 */
+                top: 0,
+                transform: `translate3d(0, ${y(drag.proposedMins)}px, 0)`,
                 height: Math.max((drag.durationMins / 60) * hourH - BLOCK_GAP, 30),
+                willChange: "transform",
               }}
             >
               <span className="min-w-0">

@@ -13,6 +13,8 @@ import { BackButton } from "@/components/ui/back-button";
 import { Modal } from "@/components/ui/modal";
 import { Switch } from "@/components/ui/switch";
 import { ImageUploader } from "@/components/ui/image-uploader";
+import { ImageCropper, SlidePreview } from "@/components/carrusel/image-cropper";
+import { DEFAULT_CROP, normalizeCrop, type CarouselCrop } from "@/lib/carousel-crop";
 import {
   upsertCarouselPost,
   setCarouselFlags,
@@ -35,6 +37,9 @@ export interface CarouselPost {
   description: string | null;
   image_url: string | null;
   type: string;
+  focal_x?: number | null;
+  focal_y?: number | null;
+  zoom?: number | null;
   button_label: string | null;
   button_href: string | null;
   starts_on: string | null;
@@ -309,6 +314,12 @@ function PostModal({
   const [showPreview, setShowPreview] = useState(false);
 
   const [imageUrl, setImageUrl] = useState<string | null>(post?.image_url ?? null);
+  // Which part of the image shows — see lib/carousel-crop
+  const [crop, setCrop] = useState<CarouselCrop>(() =>
+    post
+      ? normalizeCrop({ focal_x: post.focal_x, focal_y: post.focal_y, zoom: post.zoom })
+      : DEFAULT_CROP
+  );
   const [type, setType] = useState<string>(post?.type ?? "promocion");
   const [isActive, setIsActive] = useState(post?.is_active ?? true);
   const [isPermanent, setIsPermanent] = useState(post?.is_permanent ?? false);
@@ -320,6 +331,9 @@ function PostModal({
     setError(null);
     setWarning(null);
     formData.set("imageUrl", imageUrl ?? "");
+    formData.set("focalX", String(crop.focal_x));
+    formData.set("focalY", String(crop.focal_y));
+    formData.set("zoom", String(crop.zoom));
     formData.set("type", type);
     formData.set("isActive", String(isActive));
     formData.set("isDraft", String(asDraft));
@@ -353,7 +367,29 @@ function PostModal({
         id="carousel-form"
         className="space-y-4"
       >
-        <ImageUploader folder="products" value={imageUrl} onChange={setImageUrl} />
+        <ImageUploader
+          folder="products"
+          value={imageUrl}
+          onChange={(url) => {
+            setImageUrl(url);
+            // A new image starts centred; keeping the old framing would apply
+            // one picture's composition to another
+            setCrop(DEFAULT_CROP);
+          }}
+        />
+
+        {imageUrl && (
+          <ImageCropper
+            imageUrl={imageUrl}
+            crop={crop}
+            onChange={setCrop}
+            title={title}
+            description={description}
+            buttonLabel={buttonLabel}
+            typeLabel={meta?.label ?? ""}
+            typeEmoji={meta?.emoji ?? ""}
+          />
+        )}
 
         <Field label="Título">
           <input
@@ -508,44 +544,17 @@ function PostModal({
             <p className="text-[10px] font-bold text-muted uppercase tracking-wide mb-1.5">
               Así lo verá el cliente
             </p>
-            <div
-              className="relative rounded-3xl overflow-hidden"
-              style={
-                imageUrl
-                  ? {
-                      backgroundImage: `linear-gradient(100deg, rgba(11,11,13,0.94) 5%, rgba(11,11,13,0.7) 55%, rgba(11,11,13,0.35) 100%), url('${imageUrl}')`,
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
-                    }
-                  : {
-                      backgroundImage:
-                        "linear-gradient(100deg, rgba(11,11,13,0.95) 5%, rgba(11,11,13,0.6) 50%, rgba(255,106,61,0.35) 130%)",
-                    }
-              }
-            >
-              <div className="p-5 pr-20 min-h-[150px] flex flex-col justify-center">
-                <span className="inline-flex self-start items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-brand bg-brand/15 px-2 py-1 rounded-full mb-2">
-                  {meta?.emoji} {meta?.label}
-                </span>
-                <p className="text-[20px] leading-[1.15] font-black text-white uppercase">
-                  {title || "Título de tu publicación"}
-                </p>
-                {description && (
-                  <p className="text-xs text-white/70 mt-1.5 line-clamp-2">{description}</p>
-                )}
-                {buttonLabel && (
-                  <span className="mt-3 inline-flex self-start bg-brand text-white text-xs font-bold px-4 py-2 rounded-xl">
-                    {buttonLabel}
-                  </span>
-                )}
-              </div>
-              {!imageUrl && (
-                <Scissors
-                  size={80}
-                  className="absolute -right-3 top-1/2 -translate-y-1/2 text-brand/15 rotate-[-20deg]"
-                />
-              )}
-            </div>
+            {/* The same component the cropper previews with, so the two can't
+                disagree about what the client sees. */}
+            <SlidePreview
+              imageUrl={imageUrl}
+              crop={crop}
+              title={title}
+              description={description}
+              buttonLabel={buttonLabel}
+              typeLabel={meta?.label ?? ""}
+              typeEmoji={meta?.emoji ?? ""}
+            />
           </div>
         )}
 

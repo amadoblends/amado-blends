@@ -7,17 +7,37 @@ import { Badge } from "@/components/ui/badge";
 import { ClientTabs } from "@/components/clientes/client-tabs";
 import { ClientPhoto } from "@/components/clientes/client-photo";
 import { isBirthdayToday, isNewClient, daysFromBirthday } from "@/lib/client-rules";
+import { ClientStatusCard } from "@/components/clientes/client-status-card";
+import { getDeleteImpact } from "@/lib/actions/client-status";
+import { STATUS_META, effectiveStatus, type StoredClientStatus } from "@/lib/client-status";
+import { diagnose } from "@/lib/supabase/schema-errors";
 
 export default async function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
+  /*
+   * The status columns arrive with migration 31. Naming a missing column
+   * fails the WHOLE query, which would turn this profile into a 404 rather
+   * than a profile without a status card — so it falls back to the older
+   * shape instead of taking the page down.
+   */
+  const BASE_COLUMNS = "id, full_name, phone, email, avatar_url, segment, birth_date, created_at";
+  const STATUS_COLUMNS = "status, block_reason, block_note, status_changed_at";
+
+  const clientQuery = supabase
+    .from("clients")
+    .select(`${BASE_COLUMNS}, ${STATUS_COLUMNS}`)
+    .eq("id", id)
+    .single()
+    .then(async (result) => {
+      if (!result.error) return result;
+      if (diagnose(result.error).kind !== "missing-column") return result;
+      return supabase.from("clients").select(BASE_COLUMNS).eq("id", id).single();
+    });
+
   const [{ data: client }, { data: appointments }, { data: notes }] = await Promise.all([
-    supabase
-      .from("clients")
-      .select("id, full_name, phone, email, avatar_url, segment, birth_date, created_at")
-      .eq("id", id)
-      .single(),
+    clientQuery,
     supabase
       .from("appointments")
       .select("id, starts_at, ends_at, status, price, services(name)")
@@ -27,6 +47,23 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   ]);
 
   if (!client) notFound();
+
+  // Status columns arrive with migration 31; until then everyone reads active
+  const withStatus = client as typeof client & {
+    status?: StoredClientStatus | null;
+    block_reason?: string | null;
+    block_note?: string | null;
+    status_changed_at?: string | null;
+  };
+  const storedStatus: StoredClientStatus = withStatus.status ?? "active";
+  const lastVisit =
+    (appointments ?? [])
+      .map((a) => a.starts_at)
+      .filter((d) => d <= new Date().toISOString())
+      .sort()
+      .pop() ?? null;
+  const shownStatus = effectiveStatus(storedStatus, lastVisit);
+  const impact = await getDeleteImpact(id);
 
   const birthdayToday = isBirthdayToday(client.birth_date);
   const daysToBirthday = client.birth_date ? daysFromBirthday(client.birth_date) : null;
@@ -77,6 +114,13 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
             <h1 className="text-lg font-bold text-foreground">{client.full_name}</h1>
             {client.segment === "frecuente" && <Badge>Frecuente</Badge>}
             {stillNew && <Badge>Nuevo</Badge>}
+            {shownStatus !== "active" && (
+              <span
+                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STATUS_META[shownStatus].className}`}
+              >
+                {STATUS_META[shownStatus].label}
+              </span>
+            )}
             {birthdayToday && (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-light text-brand">
                 <Cake size={11} /> Cumple hoy
@@ -100,6 +144,16 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
           </a>
         </div>
       </div>
+
+      <ClientStatusCard
+        clientId={client.id}
+        clientName={client.full_name}
+        status={storedStatus}
+        blockReason={withStatus.block_reason ?? null}
+        blockNote={withStatus.block_note ?? null}
+        statusChangedAt={withStatus.status_changed_at ?? null}
+        impact={impact}
+      />
 
       <ClientTabs
         clientId={client.id}

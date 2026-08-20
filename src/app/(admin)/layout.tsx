@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { ThemeProvider, type Theme } from "@/components/theme/theme-provider";
 import { UnseenProvider, type UnseenCounts } from "@/components/nav/unseen-provider";
+import { NavigationHistoryProvider } from "@/components/nav/navigation-history";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -43,6 +44,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <ThemeProvider initialTheme={theme}>
       <UnseenProvider initial={unseen}>
+        <NavigationHistoryProvider home="/">
         <div className="flex w-full min-h-dvh">
           <Sidebar
             logoUrl={business?.logo_url ?? null}
@@ -55,6 +57,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <BottomNav />
           </div>
         </div>
+        </NavigationHistoryProvider>
       </UnseenProvider>
     </ThemeProvider>
   );

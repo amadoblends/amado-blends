@@ -14,10 +14,16 @@ import {
 import { cn } from "@/lib/utils";
 import { shopLongDate, shopTime } from "@/lib/timezone";
 import { setFeedbackStatus } from "@/lib/actions/feedback";
+import {
+  feedbackCategoryEmoji,
+  feedbackCategoryLabel,
+  type FeedbackArea,
+} from "@/lib/feedback-categories";
 
 export interface FeedbackItem {
   id: string;
-  area: "app" | "service";
+  area: FeedbackArea;
+  category: string | null;
   message: string;
   rating: number | null;
   status: "new" | "read" | "archived";
@@ -35,6 +41,7 @@ const TABS: { key: Tab; label: string }[] = [
 
 export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
   const [tab, setTab] = useState<Tab>("new");
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   /*
@@ -53,6 +60,16 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
     for (const f of optimistic) groups[f.status].push(f);
     return groups;
   }, [optimistic]);
+
+  /*
+   * Opening a message marks it read, which is the whole point of the "new"
+   * count: it should mean "not yet looked at", not "not yet tidied up".
+   */
+  function toggleOpen(f: FeedbackItem) {
+    const next = expanded === f.id ? null : f.id;
+    setExpanded(next);
+    if (next && f.status === "new") move(f.id, "read");
+  }
 
   function move(id: string, status: Tab) {
     startTransition(async () => {
@@ -123,10 +140,21 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                   <p className="text-sm font-bold text-foreground truncate flex items-center gap-1.5">
                     <User size={12} className="text-muted shrink-0" />
                     {f.client_name ?? "Cliente"}
+                    {f.status === "new" && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" />
+                    )}
                   </p>
-                  <p className="text-[11px] text-muted">
-                    {f.area === "app" ? "Sobre la app" : "Sobre el servicio"} ·{" "}
-                    {shopLongDate(f.created_at)} · {shopTime(f.created_at)}
+                  <p className="text-[11px] text-muted flex items-center gap-1 flex-wrap">
+                    <span className="font-semibold text-foreground/80">
+                      {feedbackCategoryEmoji(f.area, f.category)}{" "}
+                      {feedbackCategoryLabel(f.area, f.category)}
+                    </span>
+                    <span>·</span>
+                    <span>{f.area === "app" ? "App" : "Servicio"}</span>
+                    <span>·</span>
+                    <span>
+                      {shopLongDate(f.created_at)} · {shopTime(f.created_at)}
+                    </span>
                   </p>
                 </div>
                 {f.rating !== null && (
@@ -137,9 +165,20 @@ export function FeedbackInbox({ items }: { items: FeedbackItem[] }) {
                 )}
               </div>
 
-              <p className="text-sm text-foreground whitespace-pre-wrap break-words">
-                {f.message}
-              </p>
+              <button
+                type="button"
+                onClick={() => toggleOpen(f)}
+                className="w-full text-left"
+              >
+                <p
+                  className={cn(
+                    "text-sm text-foreground whitespace-pre-wrap break-words",
+                    expanded !== f.id && "line-clamp-2"
+                  )}
+                >
+                  {f.message}
+                </p>
+              </button>
 
               <div className="flex gap-2 pt-0.5">
                 {f.status !== "read" && (

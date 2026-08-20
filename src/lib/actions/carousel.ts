@@ -21,6 +21,10 @@ const postSchema = z.object({
   isActive: z.enum(["true", "false"]).default("true"),
   isDraft: z.enum(["true", "false"]).default("false"),
   isPermanent: z.enum(["true", "false", "on"]).default("false"),
+  // The chosen framing — see lib/carousel-crop
+  focalX: z.coerce.number().min(0).max(100).default(50),
+  focalY: z.coerce.number().min(0).max(100).default(50),
+  zoom: z.coerce.number().min(1).max(4).default(1),
 });
 
 export async function upsertCarouselPost(
@@ -45,6 +49,9 @@ export async function upsertCarouselPost(
     isDraft: formData.get("isDraft") || "false",
     // An unchecked checkbox sends nothing at all
     isPermanent: formData.get("isPermanent") || "false",
+    focalX: formData.get("focalX") ?? 50,
+    focalY: formData.get("focalY") ?? 50,
+    zoom: formData.get("zoom") ?? 1,
   });
 
   if (!parsed.success) {
@@ -96,6 +103,13 @@ export async function upsertCarouselPost(
     sort_order: parsed.data.sortOrder,
     is_active: parsed.data.isActive === "true",
     is_draft: parsed.data.isDraft === "true",
+    /*
+     * Which part of the image shows. Stored rather than baked into the file,
+     * so the original is kept and the framing stays changeable.
+     */
+    focal_x: parsed.data.focalX,
+    focal_y: parsed.data.focalY,
+    zoom: parsed.data.zoom,
   };
 
   /*
@@ -105,6 +119,8 @@ export async function upsertCarouselPost(
    * the to-the-minute window back.
    */
   const V23_COLUMNS = ["starts_at", "ends_at", "is_permanent"] as const;
+  /** The framing columns, from migration 33. */
+  const V33_COLUMNS = ["focal_x", "focal_y", "zoom"] as const;
 
   const write = (body: Record<string, unknown>) =>
     postId
@@ -125,7 +141,16 @@ export async function upsertCarouselPost(
     }
 
     if (problem.kind === "missing-column") {
-      const retry = await write(withoutKeys(payload, V23_COLUMNS));
+      /*
+       * Two migrations can be outstanding, so the framing columns are dropped
+       * first and the date columns only if that still fails. The post saves
+       * either way — losing the framing is worth far less than refusing the
+       * save.
+       */
+      let retry = await write(withoutKeys(payload, V33_COLUMNS));
+      if (retry.error) {
+        retry = await write(withoutKeys(payload, [...V23_COLUMNS, ...V33_COLUMNS]));
+      }
       if (retry.error) {
         return {
           ok: false,

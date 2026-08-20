@@ -132,7 +132,8 @@
       "Bash(perl -0pi -e 's|import \\\\{ localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins \\\\} from \"\\\\@/lib/time\";|import {\\\\n  localMins, fromMins, toMins, dateAt, fmtHHMM, durationMins, localDateStr,\\\\n} from \"\\\\@/lib/time\";|' src/components/citas/block-detail-modal.tsx)",
       "Bash(python -)",
       "Bash(npx tsx *)",
-      "Bash(rm -rf .tmp)"
+      "Bash(rm -rf .tmp)",
+      "Bash(node .tmp/nav.test.mjs)"
     ]
   }
 }

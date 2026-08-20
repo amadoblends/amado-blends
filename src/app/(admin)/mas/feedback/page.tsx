@@ -11,7 +11,7 @@ export default async function FeedbackPage() {
 
   const { data, error } = await supabase
     .from("feedback")
-    .select("id, area, message, rating, status, created_at, clients(full_name)")
+    .select("id, area, category, message, rating, status, created_at, clients(full_name)")
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -29,6 +29,8 @@ export default async function FeedbackPage() {
     return {
       id: row.id,
       area: row.area,
+      // Categories arrive with migration 32; older rows read as "other"
+      category: row.category ?? null,
       message: row.message,
       rating: row.rating,
       status: row.status,
