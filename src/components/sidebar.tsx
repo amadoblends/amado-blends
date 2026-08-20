@@ -12,6 +12,7 @@ import {
   Scissors,
   CalendarClock,
   Bell,
+  BellRing,
   History,
   BarChart3,
   BadgePercent,
@@ -48,6 +49,7 @@ const links = [
   { href: "/carrusel", label: "Carrusel", icon: Images },
   { href: "/disponibilidad", label: "Disponibilidad", icon: CalendarClock },
   { href: "/notificaciones", label: "Notificaciones", icon: Bell },
+  { href: "/notificaciones/recordatorios", label: "Recordatorios", icon: BellRing },
   { href: "/mas/feedback", label: "Comentarios", icon: MessageSquare, badge: "feedback" as const },
 ];
 

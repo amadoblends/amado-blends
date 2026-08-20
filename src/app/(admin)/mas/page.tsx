@@ -19,11 +19,13 @@ import {
   BadgePercent,
   BarChart3,
   MessageSquare,
+  BellRing,
 } from "lucide-react";
 
 const menu = [
   { href: "/perfil", label: "Mi perfil", icon: UserCircle },
   { href: "/mas/feedback", label: "Comentarios de clientes", icon: MessageSquare },
+  { href: "/notificaciones/recordatorios", label: "Recordatorios de citas", icon: BellRing },
   { href: "/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/productos", label: "Productos e inventario", icon: Package },
   /*

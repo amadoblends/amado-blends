@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { User } from "@supabase/supabase-js";
+import { NO_ROLES, type AccountRoles } from "@/lib/account-role";
 
 /**
  * The signed-in user, fetched at most once per request.
@@ -24,4 +25,42 @@ export const getUser = cache(async (): Promise<User | null> => {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
+});
+
+/**
+ * The roles the signed-in account actually holds.
+ *
+ * Read from the database, not from the email and not from the session — the
+ * grant lives in `user_roles`, gated by an allowlist, and the same answer is
+ * what RLS uses on every row below.
+ *
+ * Cached per request like getUser(), so the layout and the pages under it
+ * share one round trip.
+ */
+export const getRoles = cache(async (): Promise<AccountRoles> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("my_roles");
+
+  /*
+   * Before migration 34 there is no my_roles(). Returning "no roles" would
+   * lock the barber out of their own panel, so this falls back to the old
+   * behaviour — a profile row means admin — and the migration is what
+   * actually closes the hole.
+   */
+  if (error) {
+    const user = await getUser();
+    if (!user) return NO_ROLES;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+    return { isBarber: Boolean(profile), isClient: !profile };
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    isBarber: Boolean(row?.is_barber),
+    isClient: Boolean(row?.is_client),
+  };
 });

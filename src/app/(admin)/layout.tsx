@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import { getUser } from "@/lib/auth";
+import { getUser, getRoles } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { ThemeProvider, type Theme } from "@/components/theme/theme-provider";
 import { UnseenProvider, type UnseenCounts } from "@/components/nav/unseen-provider";
 import { NavigationHistoryProvider } from "@/components/nav/navigation-history";
+import { WrongApp } from "./wrong-app";
+import { allowedIn, wrongAppMessage } from "@/lib/account-role";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -22,6 +24,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   // Shared with every page below via React cache — one verification per request
   const user = await getUser();
+
+  /*
+   * The gate. Being signed in was never enough — this panel used to admit any
+   * Supabase user at all, which meant every client account could open it.
+   * The role comes from the database, and RLS refuses the rows underneath
+   * regardless, so this is the message rather than the defence.
+   */
+  const roles = await getRoles();
+  if (user && !allowedIn(roles, "barber")) {
+    return <WrongApp message={wrongAppMessage(roles, "barber")} />;
+  }
 
   const [{ data: profile }, { data: business }, { data: unseenRows }] = await Promise.all([
     user
